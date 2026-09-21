@@ -1,5 +1,11 @@
 # @driftdev/buoy
 
+## 0.2.1
+
+### Patch Changes
+
+- 0dc78c4: The toolbar icon is now a pillar buoy riding a wave, in place of the crosshair circle. Its lamp takes the mark colour (`--buoy-mark`).
+
 ## 0.2.0
 
 ### Minor Changes
