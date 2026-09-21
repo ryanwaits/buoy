@@ -1,0 +1,72 @@
+<!-- Hand-written fixture. Mirrors the DOM shape of a Blume docs page; the content is invented. -->
+<article class="prose mx-auto max-w-content" dir="ltr"><h1>Providers</h1><p class="text-lg text-muted-foreground">Wrap your app once and read the water level anywhere below it.</p><p>Tide keeps its state <strong>outside your components</strong> by default. When a screen needs the level (a gauge, a chart, a warning light) you read it through a <strong>provider</strong>: one wrapper at the top, no props handed down.</p>
+<h2 id="the-tideprovider-convention"><a class="blume-heading-anchor" href="#the-tideprovider-convention">The <code>&lt;TideProvider&gt;</code> convention</a></h2>
+<p>Put a <code>&lt;TideProvider&gt;</code> at the root of your app. Every component below it can read the level from <strong>any</strong> <code>.tsx</code> file, with no wiring:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" tabindex="0" data-language="tsx" data-icon="react" data-title="app/Gauge.tsx" data-line-numbers="true"><code><span class="line"><span>import</span><span> { useTide } </span><span>from</span><span> &quot;@acme/tide&quot;</span><span>;</span></span>
+<span class="line"></span>
+<span class="line"><span>export</span><span> default</span><span> function</span><span> Gauge</span><span>() {</span></span>
+<span class="line"><span>  const</span><span> [</span><span>level</span><span>, </span><span>setLevel</span><span>] </span><span>=</span><span> useTide</span><span>(</span><span>0</span><span>);</span></span>
+<span class="line"><span>  return</span><span> &lt;</span><span>button</span><span> onClick</span><span>=</span><span>{() </span><span>=&gt;</span><span> setLevel</span><span>(level </span><span>+</span><span> 1</span><span>)}&gt;Level {level}&lt;/</span><span>button</span><span>&gt;;</span></span>
+<span class="line"><span>}</span></span></code></pre>
+<pre class="astro-code astro-code-themes github-light github-dark" tabindex="0" data-language="mdx" data-icon="mdx" data-title="page.mdx"><code><span class="line"><span>Here&#39;s the harbor right now: &lt;</span><span>Gauge</span><span> /&gt;</span></span></code></pre>
+<p>A provider takes one <code>harbor</code>, so the name <strong>must match a harbor you created</strong> (<code>harbor-west</code> → <code>createTide(&quot;harbor-west&quot;)</code>). Unknown names are skipped with a console warning.</p>
+<aside class="not-prose my-5 flex flex-row items-start gap-2 rounded-blume border px-4 py-3 font-sans text-muted-foreground text-sm leading-6 [&amp;_a]:underline [&amp;_code]:font-mono border-border bg-muted" data-blume-callout="note"><span class="mt-0.5 shrink-0 text-muted-foreground"></span><div class="flex-1 [&amp;&gt;*]:mt-2! [&amp;&gt;*]:mb-0! [&amp;&gt;:first-child]:mt-0!"><p>Providers are for <strong>live</strong> water. For a level that never moves, read a <a href="/docs/helpers/snapshot">snapshot</a> instead.</p></div></aside>
+<h2 id="registering-harbors-in-tideconfigts"><a class="blume-heading-anchor" href="#registering-harbors-in-tideconfigts">Registering harbors in <code>tide.config.ts</code></a></h2>
+<p>List your harbors with <code>createTide</code>. Each one is open to every provider and drains on its own (defaulting to <code>ebb: &quot;gentle&quot;</code>).</p>
+<pre class="astro-code astro-code-themes github-light github-dark" tabindex="0" data-language="ts" data-icon="typescript" data-title="tide.config.ts"><code><span class="line"><span>import</span><span> { createTide } </span><span>from</span><span> &quot;@acme/tide&quot;</span><span>;</span></span>
+<span class="line"></span>
+<span class="line"><span>export</span><span> default</span><span> createTide</span><span>(</span><span>&quot;harbor-west&quot;</span><span>, {</span></span>
+<span class="line"><span>  ebb: </span><span>&quot;spring&quot;</span><span>, </span><span>// drain in one step</span></span>
+<span class="line"><span>});</span></span></code></pre>
+<h2 id="ebbing"><a class="blume-heading-anchor" href="#ebbing">Ebbing</a></h2>
+<p>By default a tide uses <code>ebb:gentle</code>: it drains a little on every tick, so a full harbor never empties at once. Pick another strategy with an <code>export const ebb</code> in the config file:</p>
+<pre class="astro-code astro-code-themes github-light github-dark" tabindex="0" data-language="ts" data-icon="typescript" data-title="tide.config.ts" data-line-numbers="true"><code><span class="line"><span>// Never drain on its own; call Tide.ebb() by hand.</span></span>
+<span class="line"><span>export</span><span> const</span><span> ebb</span><span> =</span><span> &quot;manual&quot;</span><span>;</span></span></code></pre>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th><code>ebb</code> value</th>
+<th>Drains</th>
+<th>Use it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&quot;gentle&quot;</code> <em>(default)</em></td>
+<td>A little on every tick</td>
+<td>Most harbors</td>
+</tr>
+<tr>
+<td><code>&quot;spring&quot;</code></td>
+<td>All at once</td>
+<td>Demos and tests</td>
+</tr>
+<tr>
+<td><code>&quot;manual&quot;</code></td>
+<td>Only when you call <code>Tide.ebb()</code></td>
+<td>Levels driven by your own clock</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="hooks"><a class="blume-heading-anchor" href="#hooks">Hooks</a></h2>
+<p>Components read the water through <code>@acme/tide/hooks</code>, with no context of their own to set up:</p>
+<div class="blume-table-scroll" tabindex="0"><table>
+<thead>
+<tr>
+<th>Hook</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>useTide()</code></td>
+<td><code>[level, setLevel]</code> for the nearest provider</td>
+</tr>
+<tr>
+<td><code>useHarbor()</code></td>
+<td><code>{ name, ebb }</code> for the harbor, or <code>null</code> before mount</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>useHarbor()</code> returns <code>null</code> until the provider mounts, so guard for it.</p>
+<aside class="not-prose my-5 flex flex-row items-start gap-2 rounded-blume border px-4 py-3 font-sans text-muted-foreground text-sm leading-6 [&amp;_a]:underline [&amp;_code]:font-mono border-accent/25 bg-accent/6" data-blume-callout="tip"><span class="mt-0.5 shrink-0 text-accent"></span><div class="flex-1 [&amp;&gt;*]:mt-2! [&amp;&gt;*]:mb-0! [&amp;&gt;:first-child]:mt-0!"><p>A level is a plain number, so it is safe to log, store and send.</p></div></aside></article>
