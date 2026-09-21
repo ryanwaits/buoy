@@ -54,6 +54,25 @@ function textBox(el: Element | null | undefined): Box | null {
   return union(mergeLines([...range.getClientRects()]));
 }
 
+/** The column the article's text runs in: the extent of its headings, paragraphs, code and tables. */
+function column(root: Element): Box {
+  const boxes: Box[] = [];
+  for (const el of root.querySelectorAll('h1, h2, h3, h4, p, pre, ul, ol, table')) {
+    // Nested blocks repeat their parent's extent; chrome in a nav or aside is not the article.
+    if (el.closest('nav, aside, header, footer')) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) boxes.push(toDoc(rect));
+  }
+  const found = union(boxes);
+  if (found) return found;
+  const box = toDoc(root.getBoundingClientRect());
+  const style = getComputedStyle(root);
+  const padLeft = Number.parseFloat(style.paddingLeft) || 0;
+  box.x += padLeft;
+  box.w -= padLeft + (Number.parseFloat(style.paddingRight) || 0);
+  return box;
+}
+
 function union(boxes: Box[]): Box | null {
   if (!boxes.length) return null;
   const x = Math.min(...boxes.map((b) => b.x));
@@ -99,12 +118,9 @@ function leftToRight(layouts: Layout[]): Layout[] {
  * pins to the content's right edge on the claim's first line, like a margin mark.
  */
 export function layout(marks: { anchor: Anchor }[], root: Element): Layout[] {
-  // The content box: hosts pad their article, and marks belong to the text column.
-  const bounds = toDoc(root.getBoundingClientRect());
-  const style = getComputedStyle(root);
-  const padLeft = Number.parseFloat(style.paddingLeft) || 0;
-  bounds.x += padLeft;
-  bounds.w -= padLeft + (Number.parseFloat(style.paddingRight) || 0);
+  // Marks belong to the text column, which is often narrower than the root: a host's root may be
+  // its whole `<main>`. Measured from the content itself, the root's padded box when there is none.
+  const bounds = column(root);
   const room = bounds.x + bounds.w + PIN <= document.documentElement.clientWidth + scrollX;
   const edge = bounds.x + bounds.w - (room ? 4 : PIN - 4);
 
