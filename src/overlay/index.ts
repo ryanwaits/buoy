@@ -42,8 +42,11 @@ const svg = (d: string, size = 24): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
 
 const ICON = {
+  // A pillar buoy heeled 8deg. The mask sinks the hull below the waterline and clears a gap around the wave.
   buoy: svg(
-    '<circle cx="12" cy="12" r="5.5"/><path d="M4 12h2.5M17.5 12H20M12 4v2.5M12 17.5V20"/>',
+    '<mask id="sea" maskUnits="userSpaceOnUse" x="-4" y="-4" width="32" height="32" stroke="none"><rect x="-4" y="-4" width="32" height="32" fill="#fff"/><path d="M-4 17.5H2q2.5-1.6 5 0t5 0 5 0 5 0h6V28H-4Z" fill="#000"/><path d="M2 17.5q2.5-1.6 5 0t5 0 5 0 5 0" stroke="#000" stroke-width="3.5"/></mask>' +
+      '<g mask="url(#sea)"><g transform="rotate(8 12 17.5)"><path d="M6.31 21.5 8.95 10.27Q9.24 9 10.55 9h2.91q1.3 0 1.59 1.27L17.69 21.5M8.15 13.68h7.7M12 9V7"/><circle cx="12" cy="5.5" r="1.5" style="fill:var(--mark)"/></g></g>' +
+      '<path d="M2 17.5q2.5-1.6 5 0t5 0 5 0 5 0M7 20.72q2.5 1.6 5 0t5 0"/>',
   ),
   down: svg('<path d="M8 10l4 4 4-4"/>', 20),
   filter: svg('<path d="M5 7h14M8 12h8M10.5 17h3"/>'),
