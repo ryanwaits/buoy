@@ -100,7 +100,7 @@ mount({ data: await (await fetch('/buoy.json')).json() });
 
 `importSpecifier` says what the entry is imported as when it is a subpath (`acme/utils`), so imports from the package root are not flagged. `also` lists other entries the same pages document: a name any of them exports is not a broken reference, and a code sample that imports one of them is checked against that one.
 
-Rendered mode fetches the page, reads the article as markdown, and needs semantic HTML: real headings, and `<pre>` for code. A code block built from `<div>`s cannot be read; `buoy build` names the pages where it sees one, and holds back their "never mentioned" findings, since code it could not read may well mention them. Both modes can cover the same route: list it under `routes` and `pages`.
+Rendered mode fetches the page, reads the article as markdown, and wants semantic HTML: real headings, `<pre>` for code. A highlighter that builds its blocks from `<div>`s is read too, when the block's class says code (`font-mono`, `code-block`, `hljs`, `shiki`, `prism`, `highlight`) and its text is plainly JS or TS; the overlay lands findings in the same block. Both modes can cover the same route: list it under `routes` and `pages`.
 
 ### Telling Buoy what a page documents
 
