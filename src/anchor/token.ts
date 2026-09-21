@@ -3,6 +3,42 @@
  * belongs on the identifier inside it that the spec does not have. Read-only.
  */
 
+import { CODE_CLASS, CODE_TAGS, looksLikeCode } from '../fence';
+
+const fences = new WeakMap<Element, boolean>();
+
+/** A `<div>` block's text a line per child, as the build reads it. */
+const linesOf = (el: Element): string =>
+  el.children.length
+    ? [...el.children].map((c) => c.textContent ?? '').join('\n')
+    : (el.textContent ?? '');
+
+function isDivFence(el: Element): boolean {
+  const known = fences.get(el);
+  if (known !== undefined) return known;
+  const says = (at: Element): boolean =>
+    CODE_TAGS.test(at.tagName) && CODE_CLASS.test(at.getAttribute('class') ?? '');
+  const is =
+    says(el) &&
+    !el.querySelector('pre') &&
+    ![...el.querySelectorAll('[class]')].some(says) &&
+    looksLikeCode(linesOf(el));
+  fences.set(el, is);
+  return is;
+}
+
+/**
+ * The code block a node is in: its `<pre>`, or the `<div>` block a hand-rolled
+ * highlighter built, by the same test the build reads it with. `null` in prose.
+ */
+export function fenceOf(node: Node | null | undefined): Element | null {
+  const el = node?.nodeType === 1 ? (node as Element) : (node?.parentElement ?? null);
+  const pre = el?.closest('pre');
+  if (pre) return pre;
+  for (let at = el; at; at = at.parentElement) if (isDivFence(at)) return at;
+  return null;
+}
+
 /** The smallest thing a reader would call one passage. */
 export const BLOCK = 'p, li, td, th, dd, dt, pre, blockquote, h1, h2, h3, h4, h5, h6';
 
@@ -69,7 +105,7 @@ export function tokenRange(range: Range, names: string[]): Range | null {
   if (!names.length) return null;
   const start = range.commonAncestorContainer;
   const el = start.nodeType === 1 ? (start as Element) : start.parentElement;
-  const block = el?.closest(BLOCK) ?? el;
+  const block = fenceOf(el) ?? el?.closest(BLOCK) ?? el;
   if (!block) return null;
   const section = block.matches(HEADING) ? sectionOf(block) : [];
 

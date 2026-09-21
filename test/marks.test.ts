@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { anchorClaims } from '../src/anchor';
-import { codeLine } from '../src/anchor/token';
+import { codeLine, fenceOf } from '../src/anchor/token';
 import { toMarks } from '../src/overlay/marks';
 import type { JudgedClaim } from '../src/types';
 
@@ -130,4 +130,38 @@ test('a line of code is the element under <code>, with or without newlines', () 
   document.body.innerHTML = '<pre><code>a\nb</code></pre>';
   const plain = document.querySelector('pre') as Element;
   expect(codeLine(plain.querySelector('code')?.firstChild as Node, plain)).toBeNull();
+});
+
+test('a code block built from <div>s is a fence: findings land in it, on the word, by its line', () => {
+  document.body.innerHTML =
+    '<article><h2 id="wrap">Wrap your app</h2><p>Use <code>serverUrl</code> when self-hosting.</p>' +
+    '<div class="code-block"><div class="bar">app.tsx</div><div class="p-4 font-mono text-sm">' +
+    '<div>import { TideProvider } from "@acme/tide";</div><div>&lt;TideProvider <span>serverUrl</span>="wss://x"&gt;</div>' +
+    '</div></div><div class="font-mono">v1.2.0 released today</div></article>';
+  const root = document.body.querySelector('article') as Element;
+  const block = root.querySelector('.font-mono') as Element;
+  expect(fenceOf(block.querySelector('span'))).toBe(block);
+  // Monospace prose and the wrapper with its filename bar are not code.
+  expect(fenceOf(root.querySelectorAll('.font-mono')[1])).toBeNull();
+  expect(fenceOf(root.querySelector('.bar'))).toBeNull();
+
+  const { placed, unplaced } = anchorClaims(root, [
+    claim('f', 'fence', '<TideProvider serverUrl="wss://x">', {
+      locator: {
+        path: 'docs/page.md',
+        start: { line: 5, col: 1 },
+        end: { line: 5, col: 30 },
+        headingId: 'wrap',
+      },
+      rule: { type: 'prose-unknown-key', issue: "Unknown prop 'serverUrl' on '<TideProvider>'" },
+    }),
+  ]);
+  expect(unplaced).toHaveLength(0);
+  const [mark] = toMarks(placed, blockId);
+  // In the block, not on the same word in the paragraph above it.
+  expect(fenceOf(mark.anchor.range.startContainer)).toBe(block);
+  expect(mark.anchor.range.toString()).toBe('serverUrl');
+  expect(codeLine(mark.anchor.range.startContainer, block)?.textContent).toBe(
+    '<TideProvider serverUrl="wss://x">',
+  );
 });

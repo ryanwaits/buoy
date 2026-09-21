@@ -3,7 +3,7 @@
  * document, so it scrolls with the page and only re-measures on layout change.
  */
 
-import { BLOCK } from '../anchor/token';
+import { BLOCK, fenceOf } from '../anchor/token';
 import type { Anchor } from '../types';
 
 export type Box = { x: number; y: number; w: number; h: number };
@@ -138,7 +138,7 @@ export function layout(marks: { anchor: Anchor }[], root: Element): Layout[] {
     const lines = mergeLines([...range.getClientRects()]);
     const first = lines[0] ?? toDoc(range.getBoundingClientRect());
     const last = lines[lines.length - 1] ?? first;
-    const fence = range.startContainer.parentElement?.closest('pre');
+    const fence = fenceOf(range.startContainer);
 
     let pin: Layout['pin'];
     if (inHeading(range)) {

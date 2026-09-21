@@ -9,6 +9,7 @@
 import type { Anchor, AnchorResult, JudgedClaim } from '../types';
 import { findHeading, sectionNodes } from './section';
 import { indexText, normalize, occurrences, rangeAt, stripMarkdown, type TextIndex } from './text';
+import { fenceOf } from './token';
 
 type Section = { nodes: Node[]; index: TextIndex; taken: Set<number>; spans: Map<string, number> };
 
@@ -16,7 +17,7 @@ type Section = { nodes: Node[]; index: TextIndex; taken: Set<number>; spans: Map
 function allowed(claim: JudgedClaim, start: Node): boolean {
   const el = start.parentElement;
   if (!el) return false;
-  const inFence = el.closest('pre') !== null;
+  const inFence = fenceOf(el) !== null;
   switch (claim.kind) {
     case 'fence':
       return inFence;
@@ -71,7 +72,7 @@ function place(claim: JudgedClaim, section: Section, heading: Element | null): R
   // Drift calls a name on an import line `inline` too. Prose first; failing that, the fence it sits in.
   return (
     take((node) => allowed(claim, node)) ??
-    (claim.kind === 'inline' ? take((node) => node.parentElement?.closest('pre') != null) : null)
+    (claim.kind === 'inline' ? take((node) => fenceOf(node) !== null) : null)
   );
 }
 

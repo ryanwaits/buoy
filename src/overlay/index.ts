@@ -4,7 +4,7 @@
  */
 
 import { anchorClaims } from '../anchor';
-import { BLOCK, codeLine } from '../anchor/token';
+import { BLOCK, codeLine, fenceOf } from '../anchor/token';
 import { checkCommand, offending, sentence, signatureOf, toPrompt, truthSlice } from '../output';
 import {
   type Evidence,
@@ -153,10 +153,10 @@ function docsRow(mark: Mark): string | null {
     if (inQuote >= 0)
       return `${esc(quote.slice(0, inQuote))}<mark>${esc(word)}</mark>${esc(quote.slice(inQuote + word.length))}`;
     const parent = range.startContainer.parentElement;
-    const block = parent?.closest(BLOCK);
+    const block = fenceOf(parent) ?? parent?.closest(BLOCK);
     if (!block) return null;
     // Code is read a line at a time.
-    const code = block.matches('pre');
+    const code = fenceOf(block) === block;
     const unit = (code ? codeLine(range.startContainer, block) : null) ?? block;
     // Where the word sits, measured rather than searched: the same word may come earlier.
     const before = range.cloneRange();
