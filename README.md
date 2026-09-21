@@ -99,7 +99,22 @@ mount({ data: await (await fetch('/buoy.json')).json() });
 ```
 
 `importSpecifier` says what the entry is imported as when it is a subpath (`acme/utils`), so imports from the package root are not flagged. `also` lists other entries the same pages document: a name any of them exports is not a broken reference, and a code sample that imports one of them is checked against that one.
- Rendered mode fetches the page, reads the article as markdown, and needs semantic HTML (`<pre>` for code, real headings). Both modes can cover the same route.
+
+Rendered mode fetches the page, reads the article as markdown, and needs semantic HTML: real headings, and `<pre>` for code. A code block built from `<div>`s cannot be read; `buoy build` names the pages where it sees one, and holds back their "never mentioned" findings, since code it could not read may well mention them. Both modes can cover the same route: list it under `routes` and `pages`.
+
+### Telling Buoy what a page documents
+
+Optional. A page is on the hook for a type when a heading names it. For the rest, put a `drift.docs.json` next to `buoy.config.json`:
+
+```json
+{
+  "pages": [
+    { "page": "/docs/client", "type": "ActivityTracker", "internal": ["_status", "_pollTimer"] }
+  ]
+}
+```
+
+`page` is the route (or the markdown path), `type` the export it documents, `internal` members that are public in the types but not meant for docs, so they are never reported as "never mentioned". `deprecated` and `replacements` (`{ "old": "new" }`) do the same for members the source does not annotate. It is Drift's docs map; Buoy passes it through.
 
 ## Reading the overlay
 
