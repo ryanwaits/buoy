@@ -16,7 +16,7 @@ import { declaredAt } from './declared';
 import type { OpenPkgSpec } from './lookout/evidence';
 import { type JudgeCache, judge } from './lookout/judge';
 import { isFinding } from './policy';
-import { renderedToMarkdown, unreadCode } from './rendered';
+import { renderedToMarkdown } from './rendered';
 import { jev } from './sonar';
 import type { JudgedPage, Manifest } from './types';
 
@@ -108,7 +108,6 @@ async function build(configPath: string): Promise<void> {
     route: string,
     mode: 'markdown' | 'rendered',
     files: { file: string; content: string }[],
-    holdGaps = false,
   ): Promise<void> => {
     const truth = await truthFor(route);
     let documents: JudgedPage[] = buildPageDocuments({ ...truth, docsMap, files });
@@ -134,11 +133,7 @@ async function build(configPath: string): Promise<void> {
     }
     const configured = entryFor(config.entry, route);
     const entry = configured ? entryPath(configured) : '';
-    const pages = documents.map(findingsOnly).map((found) => {
-      // Code the page shows but Buoy could not read makes "never mentioned" untrue: hold those back.
-      const page = holdGaps
-        ? { ...found, claims: found.claims.filter((c) => c.kind !== 'gap') }
-        : found;
+    const pages = documents.map(findingsOnly).map((page) => {
       const declared = declaredAt(page.claims, [spec, ...also], base);
       return { ...page, source: { mode, entry }, ...(declared ? { declared } : {}) };
     });
@@ -160,28 +155,14 @@ async function build(configPath: string): Promise<void> {
   }
 
   // Rendered pages: what the reader sees is what gets checked, whatever the source format.
-  let unreadPages = 0;
   for (const route of config.pages ?? []) {
     const url = new URL(route, config.site);
     const res = await fetch(url).catch(() => null);
     if (!res?.ok) fail(`could not fetch ${url} (${res?.status ?? 'is the dev server running?'})`);
-    const html = await res.text();
-    const content = renderedToMarkdown(html, config.root);
+    const content = renderedToMarkdown(await res.text(), config.root);
     if (content === null) fail(`${route}: no article found. Set "root" to its selector.`);
-    const unread = unreadCode(html, config.root);
-    if (unread) {
-      unreadPages++;
-      console.warn(
-        `buoy: ${route}: ${unread} code block${unread === 1 ? '' : 's'} not in a <pre>, unread`,
-      );
-    }
-    await check(route, 'rendered', [{ file: route, content }], unread > 0);
+    await check(route, 'rendered', [{ file: route, content }]);
   }
-
-  if (unreadPages)
-    console.warn(
-      'buoy: Buoy reads code only inside <pre>. On the pages above, findings in code are missing and "never mentioned" findings are held back. Render code blocks as <pre> to check them.',
-    );
 
   const out = path.resolve(base, config.out);
   mkdirSync(path.dirname(out), { recursive: true });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { renderedToMarkdown, unreadCode } from '../src/rendered';
+import { renderedToMarkdown } from '../src/rendered';
 
 const md = (name: string, root?: string): string => {
   const out = renderedToMarkdown(readFileSync(`test/fixtures/${name}.html`, 'utf8'), root);
@@ -43,28 +43,25 @@ describe('rendered page → markdown', () => {
   });
 });
 
-describe('code the page shows outside <pre>', () => {
+describe('code blocks built from <div>s', () => {
   const block = (tag: string): string =>
-    `<article><h2>Use</h2><${tag} class="p-4 font-mono text-sm"><div>import { createTide } from "@acme/tide";</div><div>const tide = createTide();</div></${tag}></article>`;
+    `<article><h2>Use</h2><div class="code-block"><div class="bar">app.tsx</div><${tag} class="p-4 font-mono text-sm"><div>import { createTide } from "@acme/tide";</div><div>const tide = createTide();</div></${tag}></div></article>`;
+  const fence = '```ts\nimport { createTide } from "@acme/tide";\nconst tide = createTide();\n```';
 
-  test('a highlighted <div> of several lines of JS is counted', () => {
-    expect(unreadCode(block('div'))).toBe(1);
+  test('are read as fences, innermost block only, line per <div>', () => {
+    const out = renderedToMarkdown(block('div')) ?? '';
+    expect(out).toContain(fence);
+    // The wrapper's filename bar is prose around the fence, not code inside it.
+    expect(out).not.toContain('app.tsx\nimport');
   });
 
-  test('the same code in a <pre> is read, so it is not', () => {
-    expect(unreadCode(block('pre'))).toBe(0);
-    expect(renderedToMarkdown(block('pre'))).toContain('const tide = createTide();');
+  test('read the same as the <pre> they stand in for', () => {
+    expect(renderedToMarkdown(block('pre'))).toContain(fence);
   });
 
-  test('inline code and monospace prose are left alone', () => {
+  test('inline code and monospace prose stay prose', () => {
     const html =
-      '<article><p>Call <code class="font-mono">createTide()</code> once.</p><div class="font-mono">v1.2.0\nreleased today</div></article>';
-    expect(unreadCode(html)).toBe(0);
-  });
-
-  test('the platform fixtures have none', () => {
-    for (const name of ['fumadocs', 'docusaurus', 'mintlify', 'blume']) {
-      expect(unreadCode(readFileSync(`test/fixtures/${name}.html`, 'utf8'))).toBe(0);
-    }
+      '<article><p>Call <code class="font-mono">createTide()</code> once.</p><div class="font-mono">v1.2.0 released today</div></article>';
+    expect(renderedToMarkdown(html)).not.toContain('```');
   });
 });
