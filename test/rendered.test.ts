@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { renderedToMarkdown } from '../src/rendered';
+import { renderedToMarkdown, unreadCode } from '../src/rendered';
 
 const md = (name: string, root?: string): string => {
   const out = renderedToMarkdown(readFileSync(`test/fixtures/${name}.html`, 'utf8'), root);
@@ -40,5 +40,31 @@ describe('rendered page → markdown', () => {
 
   test('no article', () => {
     expect(renderedToMarkdown('<div>nothing</div>', 'article')).toBeNull();
+  });
+});
+
+describe('code the page shows outside <pre>', () => {
+  const block = (tag: string): string =>
+    `<article><h2>Use</h2><${tag} class="p-4 font-mono text-sm"><div>import { createTide } from "@acme/tide";</div><div>const tide = createTide();</div></${tag}></article>`;
+
+  test('a highlighted <div> of several lines of JS is counted', () => {
+    expect(unreadCode(block('div'))).toBe(1);
+  });
+
+  test('the same code in a <pre> is read, so it is not', () => {
+    expect(unreadCode(block('pre'))).toBe(0);
+    expect(renderedToMarkdown(block('pre'))).toContain('const tide = createTide();');
+  });
+
+  test('inline code and monospace prose are left alone', () => {
+    const html =
+      '<article><p>Call <code class="font-mono">createTide()</code> once.</p><div class="font-mono">v1.2.0\nreleased today</div></article>';
+    expect(unreadCode(html)).toBe(0);
+  });
+
+  test('the platform fixtures have none', () => {
+    for (const name of ['fumadocs', 'docusaurus', 'mintlify', 'blume']) {
+      expect(unreadCode(readFileSync(`test/fixtures/${name}.html`, 'utf8'))).toBe(0);
+    }
   });
 });

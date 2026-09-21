@@ -104,3 +104,33 @@ export function renderedToMarkdown(html: string, rootSelector?: string): string 
   blocks(root, out);
   return `${out.filter(Boolean).join('\n\n')}\n`;
 }
+
+/** Class names hosts give code that is not in a `<pre>`: utility monospace, highlighters, their own components. */
+const CODE_CLASS = /(^|[\s_-])(mono|code|codeblock|hljs|shiki|prism|highlight)([\s_-]|$)/i;
+
+/**
+ * Code blocks the page shows that Buoy cannot read, because they are not in a
+ * `<pre>`. Counted so the build can say so: read as prose, a code sample yields
+ * no findings, and every member it uses looks like one the page never mentions.
+ * Conservative: several lines, plainly JS/TS, in an element whose class says code.
+ */
+export function unreadCode(html: string, rootSelector?: string): number {
+  const doc = parse(html, { blockTextElements: { script: true, style: true, noscript: true } });
+  const root = findRoot(doc, rootSelector);
+  if (!root) return 0;
+  let count = 0;
+  const walk = (el: HTMLElement): void => {
+    if (el.tagName === 'PRE' || skipped(el)) return;
+    // A wrapper around a `<pre>` is the host's code block chrome, not unread code.
+    if (CODE_CLASS.test(el.getAttribute('class') ?? '') && !el.querySelector('pre')) {
+      const code = codeText(el).trim();
+      if (code.includes('\n') && sniff(code)) {
+        count++;
+        return;
+      }
+    }
+    for (const child of el.childNodes) if (isElement(child)) walk(child);
+  };
+  walk(root);
+  return count;
+}
