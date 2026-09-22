@@ -173,6 +173,14 @@ const isComponent = (entry: OpenPkgExport, returns: string | undefined): boolean
   /^[A-Z]/.test(entry.localName ?? entry.name) &&
   /ReactNode|Element|JSX/.test(returns ?? '');
 
+/** Every key a named type has, from its members or its schema, bases included; none when it is open. */
+function keyNames(spec: OpenPkgSpec, type: OpenPkgType): string[] {
+  const names = memberNames(spec, type);
+  if (names?.size) return [...names];
+  const found = propertiesOf(type.schema, spec);
+  return found ? Object.keys(found.properties) : [];
+}
+
 /** The properties a schema has, following one `$ref` to a named type when it points at one. */
 function propertiesOf(
   schema: Schema | undefined,
@@ -356,15 +364,23 @@ export function specRecord(
         ]
       : undefined;
   const types: Record<string, string> = {};
-  for (const typeName of [...seen].slice(0, 6)) {
+  for (const typeName of [...seen].slice(0, 8)) {
     // OpenPkg gives same-named types their own ids (`react.Options`); a ref names the id.
     const named = spec.types?.filter((t) => t.name === typeName) ?? [];
-    const schema = (
-      spec.types?.find((t) => t.id === typeName) ?? (named.length === 1 ? named[0] : undefined)
-    )?.schema;
+    const found =
+      spec.types?.find((t) => t.id === typeName) ?? (named.length === 1 ? named[0] : undefined);
+    const schema = found?.schema;
     const shape = schema ? renderType(schema, new Set(), 0) : undefined;
-    if (shape && shape !== typeName && shape !== 'object' && shape.length <= 600)
+    if (shape && shape !== typeName && shape !== 'object' && shape.length <= 600) {
       types[typeName] = shape;
+      continue;
+    }
+    // A settings type with forty keys does not fit, but its key names do: without them Jev
+    // reads `toolApproval` in a passage and finds it nowhere (`ToolLoopAgentSettings`).
+    const keys = found ? keyNames(spec, found) : [];
+    if (keys.length)
+      types[typeName] =
+        `{ keys: ${keys.slice(0, 40).join(', ')}${keys.length > 40 ? `, … ${keys.length - 40} more` : ''} }`;
   }
   // A deprecation note can run to paragraphs; the replacement is in its first sentence.
   const deprecation = entry.tags

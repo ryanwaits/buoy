@@ -770,3 +770,35 @@ test('a destructured union says which keys a caller must pick between', () => {
   );
   expect(rec.parameters?.map((p) => p.name)).toEqual(['model', 'prompt', 'messages']);
 });
+
+test('a parameter type too big to spell out is listed by its key names', () => {
+  const keys = Array.from({ length: 30 }, (_, i) => `option${i}Name`);
+  const spec = {
+    exports: [
+      {
+        name: 'Agent',
+        kind: 'class',
+        signatures: [
+          {
+            parameters: [
+              { name: 'settings', required: true, schema: { $ref: '#/types/Settings' } },
+            ],
+          },
+        ],
+      },
+    ],
+    types: [
+      {
+        name: 'Settings',
+        schema: {
+          type: 'object',
+          properties: Object.fromEntries(
+            keys.map((k) => [k, { type: 'string', description: 'x'.repeat(30) }]),
+          ),
+        },
+      },
+    ],
+  } as unknown as OpenPkgSpec;
+  const rec = specRecord(spec, spec.exports[0]);
+  expect(rec.types?.Settings).toMatch(/^\{ keys: option0Name, option1Name/);
+});
