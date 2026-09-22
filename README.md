@@ -9,7 +9,7 @@ docs page ─┐
            ├─ Drift (rules) ─┐
 TypeScript ─ OpenPkg (spec) ─┤            ┌─ a buoy on the word that is wrong
                              ├─ Buoy ─────┼─ its popup: proved by code, or likely with the odds
-             Jev (judgment) ─┘            └─ +N: members this section never mentions
+             Jev (judgment) ─┘            └─ +N: members this section never documents
 ```
 
 ## What it finds
@@ -21,7 +21,7 @@ Things a reader would copy and get wrong. From one real docs site:
 - `useMutation(callback)` without its required `deps`, on three pages. *(rule)*
 - A table that says `useCursors` returns `CursorData[]`. It returns a `Map`. *(Jev: inaccurate, 0.94)*
 - "`LiveObject.delete(key)`". There is no such method. *(Jev: inaccurate, 0.95)*
-- A section for `StorageDocument` that never mentions four of its public methods. *(gap)*
+- A section for `StorageDocument` that never documents four of its public methods. *(gap)*
 
 ## Install
 
@@ -114,11 +114,11 @@ Optional. A page is on the hook for a type when a heading names it. For the rest
 }
 ```
 
-`page` is the route (or the markdown path), `type` the export it documents, `internal` members that are public in the types but not meant for docs, so they are never reported as "never mentioned". `deprecated` and `replacements` (`{ "old": "new" }`) do the same for members the source does not annotate. It is Drift's docs map; Buoy passes it through.
+`page` is the route (or the markdown path), `type` the export it documents, `internal` members that are public in the types but not meant for docs, so they are never reported as "never documented". `deprecated` and `replacements` (`{ "old": "new" }`) do the same for members the source does not annotate. It is Drift's docs map; Buoy passes it through.
 
 ## Reading the overlay
 
-- **A buoy is a buoy.** One solid circle per place, in your page's own heading colour. It sits on the word that is wrong when the page shows it (`serverUrl`, `delete(key)`), else on the passage. Its number is how many findings share that place; `+N` means members of a type that its section never mentions. A dashed line marks where those members would go. The whole block is the target, not just the buoy: point at a flagged code block or passage and it is ringed, click anywhere in it for the popup. Rest on the washed word itself and the popup opens on its own, and closes when you move away.
+- **A buoy is a buoy.** One solid circle per place, in your page's own heading colour. It sits on the word that is wrong when the page shows it (`serverUrl`, `delete(key)`), else on the passage. Its number is how many findings share that place; `+N` means members of a type that its section never documents: a getter, method or property the spec has and the page does not teach. The card says which kind, and when the same name appears on the page as an option key (`port: 1999` for a `port` getter) it says so. A dashed line marks where those members would go. The whole block is the target, not just the buoy: point at a flagged code block or passage and it is ringed, click anywhere in it for the popup. Rest on the washed word itself and the popup opens on its own, and closes when you move away.
 - **The popup says which kind.** *Proved · code checked it*: an exact rule fired on a code sample or table: an import that does not exist, a prop or option the type does not define, too many arguments, a missing required argument or prop, a literal of the wrong primitive type, a parameter table that names a parameter the function does not have, a deprecated API taught without saying so. *Likely · a model's read · 78%*: a probability that the passage is stale, incomplete or inaccurate against the spec, from atomic yes/no questions asked of [TypeSafe](https://docs.typesafe.ai/)'s Jev model, shown only when the score clears a cut set by calibration. Set `TYPESAFE_API_KEY` and install `@typesafe-ai/sdk` to turn it on; without them the build is rules only. A page of docs costs a fraction of a cent, and answers are cached in `.buoy/jev.json`.
 - **Then why, and where to check.** One sentence naming the thing (`delete` is not a method of LiveObject) and the one fact that settles it: the members the type does have, the parameters the rule names (`userId: string, displayName: string · 9 more`), the spec's own `@deprecated` note. **Details** unfolds the rest: `docs` (what the page says), `spec` (the full signature), `source` (`file:line` of the declaration), `check` (the one command that settles it), and a note for the writer. Sentences are templates filled by code, never model text. The same issue in several places is one decision: "2 of 5" walks them, and *Not a problem* dismisses them together.
 - A rule hit is certain and Jev is never asked about it. Jev reads only what a rule cannot: whether a passage is stale, what its prose says, the types it writes out, the members it names, and whether the code breaks a stated requirement.
