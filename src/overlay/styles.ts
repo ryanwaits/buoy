@@ -32,7 +32,8 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .layer.off{display:none}
 
 .navlayer{position:fixed;top:0;left:0;pointer-events:none}
-.nd{position:absolute;display:flex;align-items:center;gap:3px;transform:translateY(-50%);animation:fade .2s ease-out both}
+.navclip{position:absolute;overflow:hidden;pointer-events:none}
+.nd{position:absolute;display:flex;align-items:center;gap:3px;transform:translateY(-50%);animation:fade .2s ease-out both;pointer-events:none}
 .nd i{width:5px;height:5px;border-radius:50%;background:var(--ink);opacity:.8}
 .nd b{margin-left:1px;font:600 10.5px/1 system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);opacity:.8}
 .nd[hidden]{display:none}

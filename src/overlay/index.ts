@@ -565,18 +565,36 @@ export function mount(options: MountOptions): () => void {
   const pageOf = (claim: JudgedClaim): JudgedPage | undefined =>
     pages.find((p) => p.claims.includes(claim));
 
-  type NavMark = { link: HTMLAnchorElement; clip: Element | null; el: HTMLElement };
+  type NavMark = {
+    link: HTMLAnchorElement;
+    clip: Element | null;
+    el: HTMLElement;
+    /** The scrollport the dot is clipped to. Shared by every mark in that scroller. */
+    port: HTMLElement;
+  };
   let navMarks: NavMark[] = [];
 
   /**
    * A dot beside the host's own nav links where decisions wait, so you can see where trouble is
-   * without visiting every page. Drawn in a fixed layer from the link's rect:
-   * sidebars are often fixed or scroll on their own.
+   * without visiting every page. Drawn in a fixed layer from the link's rect, clipped to the
+   * link's own scrollport: sidebars are often fixed or scroll on their own.
+   * Repositioned in the scroll event, not the next frame: a frame later the row has moved
+   * and the dot sits on the one above it.
    */
   function syncNav(root: Element): void {
     navLayer.replaceChildren();
     navMarks = [];
     if (Array.isArray(data) || !review) return;
+    const ports = new Map<Element | null, HTMLElement>();
+    const portFor = (clip: Element | null): HTMLElement => {
+      const hit = ports.get(clip);
+      if (hit) return hit;
+      const port = document.createElement('div');
+      port.className = 'navclip';
+      navLayer.append(port);
+      ports.set(clip, port);
+      return port;
+    };
     const links = document.querySelectorAll<HTMLAnchorElement>(
       'nav a[href], aside a[href], [role="navigation"] a[href]',
     );
@@ -584,31 +602,45 @@ export function mount(options: MountOptions): () => void {
       if (link.origin !== location.origin || link.hash || root.contains(link)) continue;
       const count = issueCount(shown(data.routes[routeOf(link.pathname)] ?? []));
       if (!count) continue;
+      let clip = link.parentElement;
+      while (clip && !/auto|scroll/.test(getComputedStyle(clip).overflowY))
+        clip = clip.parentElement;
+      const port = portFor(clip);
       const el = document.createElement('span');
       el.className = 'nd';
       // A dot says there is something here; the number says how much.
       el.innerHTML = `<i></i><b>${count}</b>`;
-      navLayer.append(el);
-      let clip = link.parentElement;
-      while (clip && !/auto|scroll/.test(getComputedStyle(clip).overflowY))
-        clip = clip.parentElement;
-      navMarks.push({ link, clip, el });
+      port.append(el);
+      navMarks.push({ link, clip, el, port });
     }
     placeNav();
   }
 
   function placeNav(): void {
-    for (const { link, clip, el } of navMarks) {
+    const seen = new Set<HTMLElement>();
+    for (const { link, clip, el, port } of navMarks) {
       const range = document.createRange();
       range.selectNodeContents(link);
-      const rects = [...range.getClientRects()].filter((r) => r.width > 0);
-      const text = rects[rects.length - 1] ?? link.getBoundingClientRect();
-      const y = text.top + text.height / 2;
+      const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+      const text = rects.at(-1);
       const bounds = clip?.getBoundingClientRect();
-      el.hidden =
-        text.width === 0 || (bounds !== undefined && (y < bounds.top || y > bounds.bottom));
-      el.style.left = `${text.right + 7}px`;
-      el.style.top = `${y}px`;
+      const box = bounds && bounds.width > 0 && bounds.height > 0 ? bounds : null;
+      const y = text ? text.top + text.height / 2 : 0;
+      el.hidden = !text || (box !== null && (y < box.top || y > box.bottom));
+      if (el.hidden || !text) continue;
+      if (!seen.has(port)) {
+        seen.add(port);
+        port.hidden = false;
+        port.style.left = `${box ? box.left : 0}px`;
+        port.style.top = `${box ? box.top : 0}px`;
+        port.style.width = box ? `${box.width}px` : '100vw';
+        port.style.height = box ? `${box.height}px` : '100vh';
+        port.style.overflow = box ? '' : 'visible';
+      }
+      const originX = box ? box.left : 0;
+      const originY = box ? box.top : 0;
+      el.style.left = `${text.right + 7 - originX}px`;
+      el.style.top = `${y - originY}px`;
     }
   }
 
@@ -1407,10 +1439,9 @@ export function mount(options: MountOptions): () => void {
   });
 
   // Capture: inner sidebar scrollers don't bubble scroll events.
-  let navFrame = 0;
+  // In the event, not the next frame, so the dot moves in the same paint as its row.
   const onScroll = (): void => {
-    cancelAnimationFrame(navFrame);
-    navFrame = requestAnimationFrame(placeNav);
+    placeNav();
   };
   document.addEventListener('scroll', onScroll, { capture: true, passive: true });
 
@@ -1434,7 +1465,6 @@ export function mount(options: MountOptions): () => void {
 
   return () => {
     cancelAnimationFrame(frame);
-    cancelAnimationFrame(navFrame);
     document.removeEventListener('scroll', onScroll, { capture: true });
     resize.disconnect();
     mutation.disconnect();
