@@ -134,7 +134,7 @@ Measured, not claimed. Real docs passages that raise no rule are judged against 
 |---|---|---|
 | stale | 84% (82–85) | 0 of 2,242 |
 | inaccurate | 83% (71–91) of what Jev is asked: what the prose says, the types it writes out, the members it names. Arity, option keys, literal types, parameter tables and imports are exact rules, not Jev's | every one read by hand |
-| incomplete | 91% (88–93) | 〃 |
+| incomplete | 91% (88–93) | 〃 · asked only where no rule can answer: prose uses, never a code sample with a checkable signature |
 
 Precision comes first: cuts are the lowest that kept clean passages under the line, except where a flagged "clean" passage turned out to be a real disagreement between a project's docs and its own source. Those are most of what is left over the line. What Jev cannot see (a renamed row in a parameter table, arity, an undefined option key) is decided by rules instead, which are exact.
 
