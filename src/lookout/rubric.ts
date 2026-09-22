@@ -19,7 +19,7 @@ import {
   SETUP_MIN,
 } from './thresholds';
 
-export const RUBRIC = 17;
+export const RUBRIC = 18;
 
 export {
   DIMENSIONS,
@@ -62,7 +62,7 @@ export const QUESTIONS: Record<QuestionId, Noul> = {
   stale: noul(
     'Does the `passage` present `export.name` as the current way to do something, even though `export` says it is deprecated or replaced?',
     '`export.deprecated` is true or `export.replacement` is set, and the passage uses or recommends it without saying it is deprecated.',
-    '`export` is not deprecated, or the passage already tells the reader it is deprecated or what replaces it.',
+    '`export` is not deprecated, or the passage already tells the reader it is deprecated or what replaces it. Naming it in a list of things that are supported, captured, handled or compared ("captures generateObject and streamObject calls") is neither using nor recommending it.',
   ),
   // `incomplete` is two questions for the same reason `inaccurate` is five: one broad
   // "would this fail?" hedged around 0.6-0.8 on real breaks.
@@ -79,7 +79,7 @@ export const QUESTIONS: Record<QuestionId, Noul> = {
   members: noul(
     'Does the `passage` call a method or read a property on `export.name`, or on an instance of it, that `export.members` does not list?',
     '`export.members` is present, and the passage uses a member by a name that is in neither `export.members` nor `export.otherMembers`: a renamed or removed method or property.',
-    'Every member the passage uses is listed in `export.members` or named in `export.otherMembers`, or `export.members` is absent, or the passage uses no members of it. A sentence saying the type does NOT have a member ("No `delete` method", "lacks methods like `pick` and `omit`", "there is no `.foo()`") agrees with a record that does not list it: that is not a use.',
+    'Every member the passage uses is listed in `export.members` or named in `export.otherMembers`, or `export.members` is absent, or the passage uses no members of it. A name that is a key of an options or settings object `export` shows (a parameter\'s type in `export.types`, its `keys:` list, or `export.parameters`) is a setting, not a member. A member the sentence attributes to a different named type ("use `OtherType` to keep its `foo` method") is that type\'s, not this one\'s. A sentence saying the type does NOT have a member ("No `delete` method", "lacks methods like `pick` and `omit`", "there is no `.foo()`") agrees with a record that does not list it: that is not a use.',
   ),
   prose: noul(
     'Does the prose of the `passage` claim a return value, default or behaviour for `export.name` that `export` contradicts?',
