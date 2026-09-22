@@ -5,8 +5,9 @@
 
 import { anchorClaims } from '../anchor';
 import { BLOCK, codeLine, fenceOf } from '../anchor/token';
-import { checkCommand, offending, sentence, signatureOf, toPrompt, truthSlice } from '../output';
+import { offending, sentence, signatureOf, toPrompt, truthSlice } from '../output';
 import {
+  DIMENSIONS,
   type Evidence,
   evidenceOf,
   isFinding,
@@ -17,6 +18,7 @@ import {
   type Kind,
   kindOf,
   maxScore,
+  topDimension,
 } from '../policy';
 import { findRoot } from '../roots';
 import { type Decision, loadStore } from '../store';
@@ -190,18 +192,127 @@ function docsRow(mark: Mark): string | null {
 
 type PopoverInput = {
   mark: Mark;
+  /** Which finding at this place the card is on. A section's gaps are one finding. */
+  at: number;
   page: JudgedPage | undefined;
   slices: SpecSlice[];
-  /** The reader's decision on this mark, when every finding here has one. */
+  /** The reader's decision on this finding, when it has one. */
   decision: Decision | undefined;
   /** The note field is open: the reader is saying what should happen. */
   resolving: boolean;
+  /** A Details row pushed over the card. */
+  view: View | null;
   /** Position among the places that show the same issue. */
   same: { at: number; of: number };
 };
 
-function popoverHTML({ mark, page, slices, decision, resolving, same }: PopoverInput): string {
-  const { claims } = mark;
+type View = 'docs' | 'spec' | 'source' | 'why';
+
+/** The findings a card walks: one per claim, except a section's gaps, which are one. */
+export function cardsOf(mark: Mark): JudgedClaim[][] {
+  return mark.claims[0].kind === 'gap' ? [mark.claims] : mark.claims.map((c) => [c]);
+}
+
+/** `Room.roomId` → `roomId`; `Room.send(data: string): void` → `send` and `(data: string)`. */
+export function memberLabel(
+  signature: string,
+  exportName?: string,
+): { name: string; params: string } {
+  const own =
+    exportName && signature.startsWith(`${exportName}.`)
+      ? signature.slice(exportName.length + 1)
+      : signature;
+  const open = own.indexOf('(');
+  if (open < 0) return { name: own, params: '' };
+  let depth = 0;
+  for (let i = open; i < own.length; i++) {
+    if ('([{<'.includes(own[i])) depth++;
+    else if (')]}'.includes(own[i]) || (own[i] === '>' && own[i - 1] !== '=')) depth--;
+    if (depth === 0) return { name: own.slice(0, open), params: own.slice(open, i + 1) };
+  }
+  return { name: own.slice(0, open), params: own.slice(open) };
+}
+
+/** The rows under Details, and what each pushes over the card. Only what the manifest holds today. */
+function viewsOf(
+  mark: Mark,
+  claim: JudgedClaim,
+  page: JudgedPage | undefined,
+  signature: string | null,
+): { key: View; brief: string; html: string }[] {
+  const views: { key: View; brief: string; html: string }[] = [];
+  const ref = claim.specRef;
+  const loc = claim.locator;
+  const rendered = page?.source?.mode === 'rendered';
+  if (claim.kind !== 'gap') {
+    const quote = docsRow(mark) ?? (claim.text ? esc(clip(claim.text)) : '');
+    const where = [
+      rendered ? null : `line ${loc.start.line}`,
+      loc.headingText ? `under “${esc(loc.headingText)}”` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    views.push({
+      key: 'docs',
+      brief: where || esc(loc.path),
+      html: `<div class="meta"><span>${esc(loc.path)}</span>${where ? `<span>·</span><span>${where}</span>` : ''}</div>${quote ? `<p class="quote mono">${quote}</p>` : ''}${rendered ? '<p class="cap">Read from the rendered page, so there is no file to open. Search the repo for the quoted text.</p>' : ''}`,
+    });
+  }
+  if (signature || ref) {
+    const has = claim.jev?.has ?? [];
+    const names = new Set(claim.jev?.names ?? []);
+    const memberRows = has.length
+      ? `<p class="cap">Members the spec has</p><div class="members">${[...has.map((m) => `<code>${esc(m)}</code>`), ...[...names].map((m) => `<code class="bad">${esc(m)}<span> · not a member</span></code>`)].join('')}</div>`
+      : '';
+    const facts = [
+      signature ? `<dt>spec</dt><dd>${esc(signature)}</dd>` : '',
+      claim.rule?.suggestion?.startsWith('Allowed: ')
+        ? `<dt>allowed</dt><dd>${esc(claim.rule.suggestion.slice(9))}</dd>`
+        : '',
+      ref?.deprecated
+        ? `<dt></dt><dd>@deprecated ${esc(ref.deprecationNote ?? '')}${ref.replacement ? ` → ${esc(ref.replacement)}` : ''}</dd>`
+        : '',
+    ].join('');
+    views.push({
+      key: 'spec',
+      brief: esc(clip(signature ?? ref?.export ?? '', 60)),
+      html: `<dl class="facts mono">${facts}</dl>${memberRows}`,
+    });
+  }
+  const declared = ref ? page?.declared?.[ref.export] : undefined;
+  if (declared)
+    views.push({
+      key: 'source',
+      brief: esc(declared),
+      html: `<div class="meta"><span class="path">${esc(declared)}</span><button type="button" class="mini" data-act="copy-text" data-text="${esc(declared)}">Copy path</button></div><p class="cap">Where the spec found <code>${esc(ref?.export ?? '')}</code> declared.</p>`,
+    });
+  const jev = claim.jev;
+  if (jev && !claim.rule) {
+    const bars = DIMENSIONS.map(
+      (d) =>
+        `<div class="bar"><span>${d}</span><i><b style="width:${Math.round(jev[d] * 100)}%"></b></i><span>${jev[d].toFixed(2).replace(/^0/, '')}</span></div>`,
+    ).join('');
+    views.push({
+      key: 'why',
+      brief: `${topDimension(claim)} ${maxScore(claim).toFixed(2).replace(/^0/, '')}${jev.reason ? ` · ${esc(jev.reason)}` : ''}`,
+      html: `<p class="cap">A model's read: probabilities, not verdicts.</p>${bars}${jev.reason ? `<dl class="facts mono"><dt>reason</dt><dd>${esc(jev.reason)}</dd></dl>` : ''}`,
+    });
+  }
+  return views;
+}
+
+function popoverHTML({
+  mark,
+  at,
+  page,
+  slices,
+  decision,
+  resolving,
+  view,
+  same,
+}: PopoverInput): string {
+  const cards = cardsOf(mark);
+  const claims = cards[at] ?? cards[0];
   const first = claims[0];
   const context = mark.anchor.range.startContainer.parentElement?.closest(BLOCK)?.textContent ?? '';
   const gaps = first.kind === 'gap';
@@ -209,41 +320,36 @@ function popoverHTML({ mark, page, slices, decision, resolving, same }: PopoverI
   const types = [...new Set(claims.map((c) => c.specRef?.export).filter(Boolean))];
   const lead = gaps
     ? `<p class="say">${claims.length === 1 ? say(sentence(first)) : `${claims.length} members of ${types.map((t) => `<code>${esc(String(t))}</code>`).join(', ')} are never mentioned in this section.`}</p>`
-    : claims.length === 1
-      ? `<p class="say">${say(sentence(first, context), word)}</p>`
-      : '';
-  const list =
-    claims.length > 1
-      ? `<ul class="says">${claims
+    : `<p class="say">${say(sentence(first, context), word)}</p>`;
+  // A section's gaps: the names, under Details, one per line.
+  const members =
+    gaps && claims.length > 1
+      ? `<div class="members">${claims
           .map((c) => {
-            const label = gaps
-              ? `<code class="mono">${esc(signatureOf(truthSlice(c, slices)) ?? c.specRef?.member ?? c.text)}</code>`
-              : `<span class="say">${say(sentence(c, context), word)}</span>`;
-            return `<li>${label}<button type="button" data-act="dismiss" data-id="${esc(c.id)}" aria-label="Not a problem: ${esc(c.specRef?.member ?? c.text)}">dismiss</button></li>`;
+            const { name, params } = memberLabel(
+              signatureOf(truthSlice(c, slices)) ?? c.specRef?.member ?? c.text,
+              types.length === 1 ? String(types[0]) : undefined,
+            );
+            return `<code><b>${esc(name)}</b><span>${esc(params)}</span></code>`;
           })
-          .join('')}</ul>`
+          .join('')}</div>`
       : '';
-  const docs = gaps ? null : docsRow(mark);
   const signature = gaps && claims.length > 1 ? null : signatureOf(truthSlice(first, slices));
   const proof = gaps ? null : proofOf(first, signature);
-  const declared = first.specRef ? page?.declared?.[first.specRef.export] : undefined;
   const ref = first.specRef;
-  const rows = [
-    docs ? `<dt>docs</dt><dd>${docs}</dd>` : '',
-    signature && !proof?.whole ? `<dt>spec</dt><dd>${esc(clip(signature, 320))}</dd>` : '',
-    // The spec's own words on a deprecation are the evidence; at rest they are the proof line.
-    ref?.deprecated && proof?.label !== 'spec'
-      ? `<dt></dt><dd>@deprecated ${esc(clip(ref.deprecationNote ?? '', 160))}</dd>`
-      : '',
-    declared ? `<dt>source</dt><dd>${esc(declared)}</dd>` : '',
-    `<dt>check</dt><dd>${esc(checkCommand(first, page))}</dd>`,
-  ].join('');
-  // Where you are: among the places that show this issue, else among the findings here.
+  const views = viewsOf(mark, first, page, signature);
+  const rows = views
+    .map(
+      (v) =>
+        `<button type="button" class="rowbtn" data-act="view" data-view="${v.key}"><span class="k">${v.key}</span><span class="v">${v.brief}</span><span class="c">›</span></button>`,
+    )
+    .join('');
+  // Where you are: among the findings at this place, else among the places that show this issue.
   const aside =
-    same.of > 1
-      ? `<button type="button" class="where" data-act="same" aria-label="Same issue in ${same.of} places. Go to the next">${same.at} of ${same.of} ›</button>`
-      : claims.length > 1
-        ? `<i>${claims.length} here</i>`
+    cards.length > 1
+      ? `<button type="button" class="where" data-act="sib" aria-label="Finding ${at + 1} of ${cards.length} here. Go to the next">${at + 1} of ${cards.length} ›</button>`
+      : same.of > 1
+        ? `<button type="button" class="where" data-act="same" aria-label="Same issue in ${same.of} places. Go to the next">${same.at} of ${same.of} ›</button>`
         : '';
   // The trimmed spec line gives way to the full one when unfolded.
   const trimmed = proof && signature && proof.label === 'spec' && !proof.whole && !ref?.deprecated;
@@ -259,13 +365,17 @@ function popoverHTML({ mark, page, slices, decision, resolving, same }: PopoverI
     : resolving
       ? `<button type="button" class="pill" data-act="resolve-cancel">Cancel</button><button type="button" class="pill go" data-act="resolve-done">Done</button>`
       : `<button type="button" class="pill" data-act="dismiss-mark">Not a problem</button><button type="button" class="pill go" data-act="resolve">Resolve</button>`;
-  return `${evidenceHTML(claims, aside)}${lead}${list}
+  const main = `${lead}
     ${proof ? `<dl class="facts mono${trimmed ? ' trimmed' : ''}"><dt>${proof.label}</dt><dd>${proof.html}</dd></dl>` : ''}
-    <div class="fold"><div>
-      <dl class="facts mono">${rows}</dl>
-    </div></div>
-    ${said}
-    <div class="pop-f"><button type="button" class="more" data-act="more" aria-expanded="false">Details${ICON.chevron}</button>${foot}</div>`;
+    <div class="fold"><div>${members}<div class="rows">${rows}</div></div></div>
+    ${said}`;
+  const open = view ? views.find((v) => v.key === view) : undefined;
+  const head = open
+    ? `<div class="pop-h"><button type="button" class="back" data-act="back" aria-label="Back to the finding">‹ Back</button><span class="crumb">${esc(ref?.export ?? first.text)} <span>${open.key}</span></span></div>`
+    : evidenceHTML(claims, aside);
+  return `${head}
+    <div class="views"><div class="track"><div class="panel-in">${main}</div><div class="panel-in">${open?.html ?? ''}</div></div></div>
+    ${open ? '' : `<div class="pop-f"><button type="button" class="more" data-act="more" aria-expanded="false">Details${ICON.chevron}</button>${foot}</div>`}`;
 }
 
 /**
@@ -375,6 +485,9 @@ export function mount(options: MountOptions): () => void {
   let checked = true;
   /** The open card's note field is showing. */
   let resolving = false;
+  /** Which finding at the open place the card is on, and the Details row pushed over it. */
+  let at = 0;
+  let view: View | null = null;
 
   // Stable ids for the nodes marks hang on, so a mark keeps its identity across syncs.
   const blockIds = new WeakMap<Node, number>();
@@ -697,14 +810,20 @@ export function mount(options: MountOptions): () => void {
     return marks.filter((m) => m.claims.some((c) => keys.has(issueKey(c))));
   };
 
+  /** The finding the open card is on. */
+  const current = (mark: Mark): JudgedClaim[] => cardsOf(mark)[at] ?? cardsOf(mark)[0];
+
   function markHTML(mark: Mark): string {
     const same = sameAs(mark);
+    const claims = current(mark);
     return popoverHTML({
       mark,
-      page: pageOf(mark.claims[0]),
+      at,
+      page: pageOf(claims[0]),
       slices: pages.flatMap((p) => p.slices),
-      decision: mark.claims.every(isResolved) ? store.resolved[mark.claims[0].id] : undefined,
+      decision: claims.every(isResolved) ? store.resolved[claims[0].id] : undefined,
       resolving,
+      view,
       same: { at: same.indexOf(mark) + 1, of: same.length },
     });
   }
@@ -713,6 +832,15 @@ export function mount(options: MountOptions): () => void {
     selected = selected === id ? null : id;
     hoverOpened = false;
     resolving = false;
+    view = null;
+    // Land on the first finding here that still asks for a decision.
+    const opened = marks.find((m) => m.id === selected);
+    at = opened
+      ? Math.max(
+          0,
+          cardsOf(opened).findIndex((c) => !c.every(isResolved)),
+        )
+      : 0;
     closePopover();
     if (selected && panel) setPanel(null);
     markSelected();
@@ -819,22 +947,56 @@ export function mount(options: MountOptions): () => void {
     store.save();
     resolving = false;
     sync();
-    const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
-    const mark = marks.find((m) => m.id === selected);
-    if (!pop || !mark) return;
-    pop.innerHTML = markHTML(mark);
+    redraw();
     // The note field is gone; keep the keyboard in the card so N moves on.
-    pop.focus({ preventScroll: true });
+    layer.querySelector<HTMLElement>('.pop:not(.exit)')?.focus({ preventScroll: true });
   }
 
-  /** Redraw the open card without moving it. */
+  /**
+   * Redraw the open card without moving it. A change of panel slides: the old height and
+   * position are held for a frame so the transition has somewhere to start from.
+   */
   function redraw(focusNote = false): void {
     const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
     const mark = marks.find((m) => m.id === selected);
     if (!pop || !mark) return;
+    const was = pop.querySelector<HTMLElement>('.views');
+    const from = was ? { h: was.offsetHeight, x: was.dataset.x ?? '0' } : null;
     pop.innerHTML = markHTML(mark);
+    const views = pop.querySelector<HTMLElement>('.views');
+    const track = pop.querySelector<HTMLElement>('.track');
+    const panel = track?.children[view ? 1 : 0] as HTMLElement | undefined;
+    if (views && track && panel) {
+      const x = view ? '-100%' : '0';
+      const to = panel.offsetHeight;
+      track.style.transition = 'none';
+      track.style.transform = `translateX(${from?.x ?? x})`;
+      views.style.height = `${from?.h ?? to}px`;
+      void views.offsetHeight;
+      track.style.transition = '';
+      track.style.transform = `translateX(${x})`;
+      views.style.height = `${to}px`;
+      views.dataset.x = x;
+      // Once there, let the panel size itself again: Details unfolds inside it.
+      setTimeout(() => {
+        if (views.isConnected) views.style.height = '';
+      }, 360);
+    }
     placePopover();
     if (focusNote) pop.querySelector<HTMLTextAreaElement>('.note')?.focus({ preventScroll: true });
+  }
+
+  /** The next finding here that asks for a decision, else the next buoy. */
+  function onward(mark: Mark): void {
+    const cards = cardsOf(mark);
+    const to = cards.findIndex((c, i) => i > at && !c.every(isResolved));
+    if (to < 0) {
+      next();
+      return;
+    }
+    at = to;
+    view = null;
+    redraw();
   }
 
   function toggleFilter(key: string): void {
@@ -859,7 +1021,8 @@ export function mount(options: MountOptions): () => void {
         setReview(!review);
         break;
       case 'next':
-        next((event as MouseEvent).shiftKey ? -1 : 1);
+        if (mark && el.closest('.pop')) onward(mark);
+        else next((event as MouseEvent).shiftKey ? -1 : 1);
         break;
       case 'filter':
       case 'pages':
@@ -888,7 +1051,7 @@ export function mount(options: MountOptions): () => void {
         restore(resolvedIssues()[Number(el.dataset.i)]?.claims ?? []);
         break;
       case 'undo':
-        if (mark) restore(mark.claims, false);
+        if (mark) restore(current(mark), false);
         redraw();
         break;
       case 'resolve':
@@ -901,11 +1064,12 @@ export function mount(options: MountOptions): () => void {
         break;
       case 'resolve-done': {
         const note = layer.querySelector<HTMLTextAreaElement>('.pop:not(.exit) .note')?.value ?? '';
-        if (mark) resolve(mark.claims, note.trim());
+        if (mark) resolve(current(mark), note.trim());
         break;
       }
       case 'more': {
-        const pop = layer.querySelector('.pop:not(.exit)');
+        const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
+        pop?.querySelector<HTMLElement>('.views')?.style.removeProperty('height');
         const on = pop?.querySelector('.fold')?.classList.toggle('open') ?? false;
         pop?.classList.toggle('open', on);
         el.setAttribute('aria-expanded', String(on));
@@ -921,21 +1085,36 @@ export function mount(options: MountOptions): () => void {
         break;
       }
       case 'dismiss-mark':
-        if (mark) resolve(mark.claims, null);
+        if (mark) resolve(current(mark), null);
         break;
-      case 'dismiss': {
-        const claim = mark?.claims.find((c) => c.id === el.dataset.id);
-        if (mark && claim) resolve([claim], null);
+      case 'sib':
+        if (mark) {
+          at = (at + 1) % cardsOf(mark).length;
+          resolving = false;
+          redraw();
+        }
         break;
-      }
+      case 'view':
+        view = (el.dataset.view as View) ?? null;
+        redraw();
+        break;
+      case 'back':
+        view = null;
+        redraw();
+        break;
+      case 'copy-text':
+        void navigator.clipboard.writeText(el.dataset.text ?? '').then(() => {
+          el.textContent = 'Copied';
+        });
+        break;
     }
   }
 
   /** Enter in the note resolves; the field is one line of intent, not an essay. */
   function onNoteKey(e: Event): void {
     const event = e as KeyboardEvent;
-    const at = event.composedPath()[0] as HTMLElement | undefined;
-    if (!at?.matches?.('.note')) return;
+    const field = event.composedPath()[0] as HTMLElement | undefined;
+    if (!field?.matches?.('.note')) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
@@ -946,7 +1125,7 @@ export function mount(options: MountOptions): () => void {
     } else if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       const mark = marks.find((m) => m.id === selected);
-      if (mark) resolve(mark.claims, (at as HTMLTextAreaElement).value.trim());
+      if (mark) resolve(current(mark), (field as HTMLTextAreaElement).value.trim());
     }
   }
 
@@ -1096,11 +1275,24 @@ export function mount(options: MountOptions): () => void {
     },
     r: () => {
       const mark = marks.find((m) => m.id === selected);
-      if (!mark || mark.claims.every(isResolved)) return;
+      if (!mark || view || current(mark).every(isResolved)) return;
       resolving = true;
       redraw(true);
     },
+    arrowright: () => step(1),
+    arrowleft: () => step(-1),
   };
+
+  /** Walk the findings at the open place. */
+  function step(by: number): void {
+    const mark = marks.find((m) => m.id === selected);
+    if (!mark || view) return;
+    const n = cardsOf(mark).length;
+    if (n < 2) return;
+    at = (at + by + n) % n;
+    resolving = false;
+    redraw();
+  }
 
   const onKey = (event: KeyboardEvent): void => {
     if (event.key === 'Escape') {
@@ -1109,6 +1301,11 @@ export function mount(options: MountOptions): () => void {
         return;
       }
       if (!selected) return;
+      if (view) {
+        view = null;
+        redraw();
+        return;
+      }
       const pin = layer.querySelector<HTMLElement>(`.pin[data-claim="${CSS.escape(selected)}"]`);
       select(null);
       // Give focus back to where the reader was.
