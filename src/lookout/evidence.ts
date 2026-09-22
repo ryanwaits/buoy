@@ -71,6 +71,8 @@ type Signature = {
   returns?: { schema?: Schema };
   /** Set by `unpacked`: the parameters are the keys of one destructured object. */
   braces?: boolean;
+  /** Set by `unpacked`: the caller must pass every key of one of these lists. */
+  oneOf?: string[][];
 };
 type Member = {
   name: string;
@@ -137,7 +139,10 @@ export function renderType(schema: Schema | undefined, seen: Set<string>, depth 
   if (schema.const !== undefined) return JSON.stringify(schema.const);
   if (schema.enum) return schema.enum.map((v) => JSON.stringify(v)).join(' | ');
   const union = schema.anyOf ?? schema.oneOf;
-  if (union) return union.map((s) => renderType(s, seen, depth + 1)).join(' | ');
+  // `anyOf: [{ required: ['prompt'] }, { required: ['messages'] }]` beside `properties` says
+  // which keys a caller must pick between; it is not a union of types.
+  if (union && !(schema.properties && union.every((s) => s.required && !s.properties && !s.$ref)))
+    return union.map((s) => renderType(s, seen, depth + 1)).join(' | ');
   if (schema.allOf) return schema.allOf.map((s) => renderType(s, seen, depth + 1)).join(' & ');
   if (schema.prefixItems)
     return `[${schema.prefixItems.map((s) => renderType(s, seen, depth + 1)).join(', ')}]`;
@@ -172,10 +177,19 @@ const isComponent = (entry: OpenPkgExport, returns: string | undefined): boolean
 function propertiesOf(
   schema: Schema | undefined,
   spec: OpenPkgSpec,
-): { properties: Record<string, Schema>; required: Set<string> } | null {
+): { properties: Record<string, Schema>; required: Set<string>; oneOf?: string[][] } | null {
   if (!schema) return null;
-  if (schema.properties)
-    return { properties: schema.properties, required: new Set(schema.required ?? []) };
+  if (schema.properties) {
+    const arms = (schema.anyOf ?? schema.oneOf)?.filter(
+      (s) => s.required && !s.properties && !s.$ref,
+    );
+    const oneOf = arms?.length ? arms.map((s) => s.required as string[]) : undefined;
+    return {
+      properties: schema.properties,
+      required: new Set(schema.required ?? []),
+      ...(oneOf ? { oneOf } : {}),
+    };
+  }
   if (schema.$ref) {
     const name = refName(schema.$ref);
     const named =
@@ -224,7 +238,7 @@ export function unpacked(signature: Signature, spec: OpenPkgSpec): Signature {
     required: found.required.has(name),
     ...(schema.default === undefined ? {} : { default: schema.default }),
   }));
-  return { ...signature, parameters, braces: true };
+  return { ...signature, parameters, braces: true, ...(found.oneOf ? { oneOf: found.oneOf } : {}) };
 }
 
 function signatureOf(
@@ -242,7 +256,10 @@ function signatureOf(
   );
   const returns = known(signature.returns ? renderType(signature.returns.schema, seen) : undefined);
   const list = signature.braces ? `{ ${params.join(', ')} }` : params.join(', ');
-  return `${name}${generics}(${list})${returns ? `: ${returns}` : ''}`;
+  const oneOf = signature.oneOf?.length
+    ? ` /* one of: ${signature.oneOf.map((arm) => arm.join(' + ')).join(' | ')} */`
+    : '';
+  return `${name}${generics}(${list}${oneOf})${returns ? `: ${returns}` : ''}`;
 }
 
 const isPublic = (m: Member): boolean =>
@@ -500,7 +517,9 @@ function memberNames(
   };
   const fromSchema = (schema: Schema | undefined): boolean => {
     if (!schema) return true;
-    if (schema.additionalProperties || schema.anyOf || schema.oneOf) return false;
+    const arms = schema.anyOf ?? schema.oneOf;
+    const constraint = arms?.every((s) => s.required && !s.properties && !s.$ref) ?? false;
+    if (schema.additionalProperties || (arms && !constraint)) return false;
     for (const key of Object.keys(schema.properties ?? {})) names.add(key);
     if (schema.$ref && !merge(resolve(refName(schema.$ref)))) return false;
     return (schema.allOf ?? []).every(fromSchema);

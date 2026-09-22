@@ -732,3 +732,41 @@ test('a call whose options literal elides at its own level is a fragment, not a 
     'whole',
   );
 });
+
+test('a destructured union says which keys a caller must pick between', () => {
+  const spec = {
+    exports: [
+      {
+        name: 'generateText',
+        kind: 'function',
+        signatures: [
+          {
+            parameters: [
+              {
+                name: 'options',
+                required: true,
+                'x-ts-destructured': true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    model: { type: 'string' },
+                    prompt: { type: 'string' },
+                    messages: { type: 'array' },
+                  },
+                  required: ['model'],
+                  anyOf: [{ required: ['prompt'] }, { required: ['messages'] }],
+                },
+              },
+            ],
+            returns: { schema: { type: 'object' } },
+          },
+        ],
+      },
+    ],
+  } as unknown as OpenPkgSpec;
+  const rec = specRecord(spec, spec.exports[0]);
+  expect(rec.signature).toBe(
+    'generateText({ model: string, prompt?: string, messages?: unknown[] } /* one of: prompt | messages */): object',
+  );
+  expect(rec.parameters?.map((p) => p.name)).toEqual(['model', 'prompt', 'messages']);
+});
