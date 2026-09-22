@@ -49,6 +49,29 @@ type Ask = {
   has: () => string[];
 };
 
+/**
+ * "Use `OtherType` to keep its `foo` method": `foo` is OtherType's. A member whose nearest
+ * preceding backticked name is a different export of the package is that export's, not this one's.
+ */
+function attributedElsewhere(
+  passage: string,
+  member: string,
+  self: string,
+  spec: OpenPkgSpec,
+): boolean {
+  const at = passage.search(new RegExp(`\\b${member.replace(/\$/g, '\\$')}\\b`));
+  if (at < 0) return false;
+  const before = [...passage.slice(0, at).matchAll(/`([A-Za-z_$][\w$.]*)(?:\(\))?`/g)].map(
+    (m) => m[1],
+  );
+  const nearest = before[before.length - 1];
+  if (!nearest || nearest === self || nearest === member) return false;
+  return (
+    spec.exports.some((e) => e.name === nearest) ||
+    (spec.types ?? []).some((t) => t.name === nearest)
+  );
+}
+
 function askFor(claim: Claim, input: JudgeInput): Ask | null {
   // A rule hit is certain; a gap is a rule hit. Jev has no say on either.
   if (claim.kind === 'gap' || claim.rule) return null;
@@ -69,7 +92,11 @@ function askFor(claim: Claim, input: JudgeInput): Ask | null {
   const entry = home?.exports.find((e) => e.name === claim.specRef?.export);
   // A member's record lists no members, so there is nothing for a name to be missing from.
   const names = (): string[] =>
-    home && entry && !claim.specRef?.member ? unknownMembers(passage, home, entry) : [];
+    home && entry && !claim.specRef?.member
+      ? unknownMembers(passage, home, entry).filter(
+          (n) => !attributedElsewhere(passage, n, entry.name, home),
+        )
+      : [];
   const has = (): string[] => (home && entry ? knownMembers(home, entry) : []);
   if (home && entry && claim.specRef) {
     state.export = specRecord(home, entry, claim.specRef.member, passage);

@@ -175,3 +175,27 @@ test('names play no part in the request or its cache key', async () => {
   await judge([{ page: doc, content: md, spec: live }], spy, {});
   expect(JSON.stringify(states)).not.toContain('names');
 });
+
+test("a member the sentence gives to another export is not this one's missing member", async () => {
+  const spec = {
+    exports: [
+      { name: 'Registry', kind: 'interface', members: [{ name: 'languageModel', kind: 'method' }] },
+      {
+        name: 'Experimental_EvaluationRegistry',
+        kind: 'interface',
+        members: [{ name: 'evaluationModel', kind: 'method' }],
+      },
+    ],
+  } as never;
+  const content =
+    '`Registry` is unchanged; use `Experimental_EvaluationRegistry` to retain its experimental `evaluationModel` method.\n';
+  const page = {
+    packageName: 'p',
+    path: 'docs/a.md',
+    slices: [],
+    claims: [claim('sentence', 1, { specRef: { export: 'Registry' } })],
+  };
+  const classifier = fake({ about: 0.9, members: 0.9 });
+  const { pages } = await judge([{ page, content, spec }], classifier, {});
+  expect(pages[0].claims[0].jev?.inaccurate ?? 0).toBe(0);
+});
