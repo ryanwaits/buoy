@@ -70,6 +70,38 @@ function divFence(el: HTMLElement): string | null {
   return looksLikeCode(code) ? code : null;
 }
 
+/** A code block's title, as hosts show it: a filename bar, a caption, a `data-title`. */
+const TITLE =
+  'figcaption, [data-slot="card-title"], [data-title], [class*="title"], [class*="filename"]';
+
+/**
+ * `title="AI SDK 5"` on a fence is how docs mark before/after code, and Drift reads it from
+ * the fence's info string. Hosts render it as a bar above the `<pre>`, inside a wrapper.
+ */
+function titleOf(pre: HTMLElement): string {
+  const own = pre.getAttribute('data-title') ?? pre.getAttribute('title');
+  if (own) return own.trim();
+  let scope: HTMLElement | null = pre.parentNode as HTMLElement | null;
+  for (let up = 0; scope && up < 3; up++, scope = scope.parentNode as HTMLElement | null) {
+    if (!scope.querySelectorAll) break;
+    const inside = (el: HTMLElement): boolean => {
+      for (
+        let at = el.parentNode as HTMLElement | null;
+        at;
+        at = at.parentNode as HTMLElement | null
+      )
+        if (at === pre) return true;
+      return false;
+    };
+    const found = scope
+      .querySelectorAll(TITLE)
+      .find((el) => !el.querySelector('pre') && !inside(el));
+    const text = found?.getAttribute('data-title') ?? found?.text.replace(/\s+/g, ' ').trim();
+    if (text && text.length <= 80) return text;
+  }
+  return '';
+}
+
 function table(el: HTMLElement): string {
   const rows = el
     .querySelectorAll('tr')
@@ -94,7 +126,9 @@ function blocks(el: HTMLElement, out: string[]): void {
     if (/^H[1-6]$/.test(tag)) out.push(`${'#'.repeat(Number(tag[1]))} ${inline(child).trim()}`);
     else if (tag === 'PRE') {
       const code = codeText(child).trimEnd();
-      out.push(`\`\`\`${language(child) || sniff(code)}\n${code}\n\`\`\``);
+      const title = titleOf(child);
+      const info = `${language(child) || sniff(code)}${title ? ` title="${title.replace(/"/g, "'")}"` : ''}`;
+      out.push(`\`\`\`${info}\n${code}\n\`\`\``);
     } else if (divFence(child) !== null) out.push(`\`\`\`ts\n${divFence(child)}\n\`\`\``);
     else if (tag === 'P') out.push(inline(child).trim());
     else if (tag === 'LI') out.push(`- ${inline(child).trim()}`);

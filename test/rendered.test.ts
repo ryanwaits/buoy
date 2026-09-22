@@ -26,8 +26,10 @@ describe('rendered page → markdown', () => {
     expect(md('mintlify', '.mdx-content')).toContain('- `ebbRate` - Milliseconds between ebbs');
   });
 
-  test('blume: language from data-language', () => {
-    expect(md('blume', 'article')).toMatch(/```tsx\nimport \{ useTide \} from "@acme\/tide";/);
+  test('blume: language and title from data attributes', () => {
+    expect(md('blume', 'article')).toMatch(
+      /```tsx title="app\/Gauge.tsx"\nimport \{ useTide \} from "@acme\/tide";/,
+    );
   });
 
   test('untagged <pre> is tagged ts only when it plainly is', () => {
@@ -64,4 +66,12 @@ describe('code blocks built from <div>s', () => {
       '<article><p>Call <code class="font-mono">createTide()</code> once.</p><div class="font-mono">v1.2.0 released today</div></article>';
     expect(renderedToMarkdown(html)).not.toContain('```');
   });
+});
+
+test('a code block title in a header bar becomes the fence title', () => {
+  const html =
+    '<article><div class="group"><div class="flex"><div data-slot="card-title">AI SDK 5</div><button>Copy</button></div><pre><code>const a = generateText({ model });</code></pre></div></article>';
+  expect(renderedToMarkdown(html)).toContain(
+    '```ts title="AI SDK 5"\nconst a = generateText({ model });',
+  );
 });
