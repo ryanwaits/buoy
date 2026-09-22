@@ -1,11 +1,10 @@
 {
-  "name": "@driftdev/buoy",
-  "version": "0.6.0",
+  "name": "@waits/buoy",
+  "version": "0.0.1",
   "description": "Docs review overlay. OpenPkg is the record, Buoy pins where the page disagrees.",
   "keywords": [
     "docs",
     "documentation",
-    "drift",
     "review",
     "overlay",
     "devtool"

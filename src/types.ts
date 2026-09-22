@@ -34,7 +34,7 @@ export type Jev = {
   has?: string[];
 };
 
-/** The only thing Buoy adds to Drift's contract. */
+/** A claim plus Jev's behaviour reading, when one was asked. */
 export type JudgedClaim = Claim & { jev?: Jev };
 
 export type JudgedPage = Omit<PageDocument, 'claims'> & {

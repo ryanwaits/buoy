@@ -3,7 +3,7 @@ import { normalize } from './text';
 
 const HEADINGS = 'h1, h2, h3, h4, h5, h6';
 
-/** Same punctuation strip as Drift's `PageSlugger` (github-slugger rules). */
+/** Same punctuation strip as github-slugger. */
 const SLUG_PUNCT: RegExp = /[ -⁯⸀-⹿\\'!"#$%&()*+,./:;<=>?@[\]^`{|}~]/g;
 
 function slug(value: string): string {

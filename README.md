@@ -5,11 +5,10 @@ OpenPkg is the record. Buoy marks the page.
 Buoy is a dev overlay for docs sites. It checks what a section says against the exports that section names, and pins each disagreement on the rendered page. It never rewrites your docs.
 
 ```
-a heading section
-  → the names it imports, calls, and writes in a shape
-TypeScript → OpenPkg, once → the thin record for those names
-  → code: a name the record lacks, a required argument the call skips
-  → Jev: does the prose contradict the description
+a heading section → the words in it
+TypeScript → OpenPkg, once → the thin record for the names that appear
+  → Jev: is this word an API claim, or a value / comment / example data?
+  → code: a proof only when that answer is extreme and the record lacks the name
   → a buoy on the word, same card as before
 ```
 
@@ -27,7 +26,7 @@ Things a reader would copy and get wrong. From one real docs site:
 ## Install
 
 ```sh
-bun add -d @driftdev/buoy
+bun add -d @waits/buoy
 ```
 
 Dev only. React 18+ if you use the React wrapper; the core is plain TypeScript with no runtime dependencies.
@@ -53,7 +52,7 @@ bunx buoy build
 3. Mount the overlay in your docs layout.
 
 ```tsx
-import { Buoy } from '@driftdev/buoy/react';
+import { Buoy } from '@waits/buoy/react';
 
 export default function DocsLayout({ children }) {
   return (
@@ -68,7 +67,7 @@ export default function DocsLayout({ children }) {
 Without React:
 
 ```js
-import { mount } from '@driftdev/buoy';
+import { mount } from '@waits/buoy';
 mount({ data: await (await fetch('/buoy.json')).json() });
 ```
 
@@ -117,7 +116,7 @@ Rendered mode fetches the page, reads the article as markdown, and wants semanti
 
 A name, an import, a required argument, and a deprecation are checked in code against the thin OpenPkg record. A wrong key or a missing required argument does not depend on a model. Jev is asked only whether the prose contradicts the description, and a behaviour buoy shows when that answer is `contradicts` at confidence 0.8 or above.
 
-The earlier rubric (stale, incomplete, inaccurate, about 2,200 clean passages) belonged to the Drift judge. It is not this build. A false proof is a bug in the section scan or in OpenPkg, and it is not filtered in the overlay.
+A false proof is a bug in the section scan or in OpenPkg, and it is not filtered in the overlay.
 
 ## What it will not do
 

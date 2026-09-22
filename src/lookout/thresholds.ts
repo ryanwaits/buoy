@@ -8,7 +8,7 @@ export type Dimension = (typeof DIMENSIONS)[number];
 
 /**
  * The atomic questions behind `inaccurate`: what a passage SAYS. What a call DOES (too many
- * arguments, an undefined option, a literal of the wrong type) is exact, so Drift decides it with
+ * arguments, an undefined option, a literal of the wrong type) is exact, so the build decides it with
  * rules, and Jev is not asked.
  */
 export const REASONS = ['prose', 'declared', 'members'] as const;
@@ -36,8 +36,8 @@ export const SETUP_MIN = 0.7;
 /**
  * For an export with overloads, "leaves out a required parameter" means required in every one of
  * them, and Jev hedges: `atom(null, write)`, `produce(recipe)` and `create()(...)`, each a valid
- * overload, scored 0.52-0.66. It counts from here up. Drift's `prose-missing-required` decides the
- * exact cases across overloads.
+ * overload, scored 0.52-0.66. It counts from here up. A missing required argument is a proof
+ * when the call is real and the name is absent.
  */
 export const INCOMPLETE_OVERLOADED_MIN = 0.7;
 

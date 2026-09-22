@@ -1,5 +1,5 @@
 /**
- * Anchoring: Drift locators are source-markdown coordinates; the overlay needs
+ * Anchoring: locators are source-markdown coordinates; the overlay needs
  * DOM ranges. Find each claim's section by heading, then its text inside it.
  *
  * Read-only. Nothing here mutates the host's DOM: React hosts re-render and
@@ -69,7 +69,7 @@ function place(claim: JudgedClaim, section: Section, heading: Element | null): R
     }
     return null;
   };
-  // Drift calls a name on an import line `inline` too. Prose first; failing that, the fence it sits in.
+  // A name on an import line is `inline` too. Prose first; failing that, the fence it sits in.
   return (
     take((node) => allowed(claim, node)) ??
     (claim.kind === 'inline' ? take((node) => fenceOf(node) !== null) : null)

@@ -91,7 +91,7 @@ test('findings on one span share one mark, placed on the word that is wrong', ()
   expect(marks.map((m) => m.claims.map((c) => c.id))).toEqual([['a', 'b'], ['c']]);
   expect(marks.map((m) => m.token)).toEqual([true, true]);
   expect(marks[0].anchor.range.toString()).toBe('serverUrl');
-  // The name Drift anchored is not the word that is wrong; the field beside it is.
+  // The name the locator pointed at is not the word that is wrong; the field beside it is.
   expect(marks[1].anchor.range.toString()).toBe('joinedAt');
 });
 

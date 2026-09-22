@@ -1,4 +1,8 @@
-# @driftdev/buoy
+# @waits/buoy
+
+## 0.0.1
+
+First publish under `@waits/buoy`. OpenPkg is the record. A section's words are listed; Jev says whether each is an API claim; code writes a proof only when that answer is extreme and the record lacks the name. Drift is not a dependency.
 
 ## 0.6.0
 

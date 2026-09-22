@@ -4,7 +4,7 @@ Always use bun.
 
 ## What this is
 
-Buoy (`@driftdev/buoy`): docs-review overlay devtool. OpenPkg is the record. Buoy reads a section, checks the names and required arguments in code, asks Jev whether the prose contradicts the description, and paints buoys on the rendered page. Not Drift; Drift is not a dependency.
+Buoy (`@waits/buoy`): docs-review overlay. OpenPkg is the record. A section's words are listed; Jev says whether each is an API claim; code writes a proof only when that answer is extreme and the record lacks the name. The overlay paints the buoys. Drift is not a dependency.
 
 ## Hard rules
 
@@ -26,13 +26,13 @@ Buoy (`@driftdev/buoy`): docs-review overlay devtool. OpenPkg is the record. Buo
 - `src/rendered.ts` rendered-page mode: fetched HTML → markdown subset → the same section reader as markdown mode (`routes`). Config `site` + `pages` (+ `root`). Wants semantic HTML (`<pre>`, headings); `src/fence.ts` is the one definition of a code block (`<pre>`, or a `<div>` whose class says code and whose text is plainly JS/TS), shared by the build and the overlay (`anchor/token.ts` `fenceOf`): change both together, never one. Build-time only, never imported by the overlay.
 - `src/config.ts` `buoy.config.json` shape. `entry` is one path or a route → entry map (exact, longest prefix, `"*"`) for multi-package repos.
 - `src/sonar` provider-neutral decision-model client; Jev (TypeSafe) is the first adapter. Imports nothing from Buoy; meant to become its own package.
-- `src/read.ts` the build. A heading section. Code lists imports, call keys, positional arguments, and `{ shapes }` in prose. OpenPkg was extracted once; the section gets the thin record (parameters, required, one-of, members, deprecated, description). A name in a use position that the record lacks, or a required argument a non-elided call skips, is a proof. A fence title or heading that says the sample is an older version drops the section. Jev is one Choice per mentioned export, cached in `.buoy/jev.json`: does the prose contradict the description. No key, no behaviour buoys.
+- `src/read.ts` the build. A heading section. Code lists the words. OpenPkg is extracted once; the section gets the thin record. Jev answers, for each word not already in the record, whether the section claims it is an option, parameter, or member. Code writes a proof only when that answer is extreme. A required argument is a proof only when a real call skipped it. An older-version heading or fence title drops the section. Cached in `.buoy/jev.json`.
 - `src/lookout/evidence.ts` projects an OpenPkg export into the record the card shows. `thresholds.ts` is the cut for a behaviour score. Jev does not veto a proof.
-- The seam: a rule hit is the ledger (code checked it, "Proved"). A behaviour score is a sample ("Likely") and never writes on the ledger. Exact checks stay in `src/read.ts`.
-- `src/react.ts` `<Buoy />` thin wrapper (`@driftdev/buoy/react`). `src/cli.ts` `buoy build`: `buoy.config.json` (entry, out, routes → markdown globs) → manifest.
+- The seam: a rule hit is the ledger (code checked it, "Proved"). A behaviour score is a sample ("Likely") and never writes on the ledger.
+- `src/react.ts` `<Buoy />` thin wrapper (`@waits/buoy/react`). `src/cli.ts` `buoy build`: `buoy.config.json` (entry, out, routes → markdown globs) → manifest.
 - Local install into another repo: `bun run build && bun pm pack`, then `bun add -d <path>.tgz --force` there (bun caches same-version tarballs; without `--force` you get stale code). Bun also locks the tarball's dependency ranges by path, so after changing `dependencies` bump `version` first: a new tarball name is the only thing that makes the host re-resolve them. Turbopack won't follow `bun link` symlinks outside its root.
 
-## Upstream (fix in Drift or OpenPkg, not here)
+## Upstream (fix in OpenPkg, not here)
 
 - A false name or required-argument hit is a bug in the section scan or in OpenPkg. Fix it there. Never filter it in the overlay.
 - Exact checks stay in `src/read.ts`. Jev is only the behaviour question. It answers a set check with a confident no when it misses, which is why it is not asked.
@@ -41,4 +41,4 @@ Buoy (`@driftdev/buoy`): docs-review overlay devtool. OpenPkg is the record. Buo
 
 ## Dependency policy
 
-Same as Drift: exact pins for build tooling (bunup, biome), caret for the rest, typescript stays ^5, never dist-tags.
+Exact pins for build tooling (bunup, biome), caret for the rest, typescript stays ^5, never dist-tags.

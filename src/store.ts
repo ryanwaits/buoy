@@ -1,5 +1,5 @@
 /**
- * Per-browser review state, keyed by Drift's stable claim ids.
+ * Per-browser review state, keyed by claim ids.
  * v1 is local only; shared threads wait for a real need.
  */
 

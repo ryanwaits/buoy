@@ -34,9 +34,9 @@ describe('rendered page → markdown', () => {
 
   test('untagged <pre> is tagged ts only when it plainly is', () => {
     const html =
-      '<article><pre>import { a } from "b";</pre><pre>client.leaveRoom("x"); // gone</pre><pre>bun add -D @driftdev/buoy</pre></article>';
+      '<article><pre>import { a } from "b";</pre><pre>client.leaveRoom("x"); // gone</pre><pre>bun add -D @waits/buoy</pre></article>';
     expect(renderedToMarkdown(html, 'article')).toBe(
-      '```ts\nimport { a } from "b";\n```\n\n```ts\nclient.leaveRoom("x"); // gone\n```\n\n```\nbun add -D @driftdev/buoy\n```\n',
+      '```ts\nimport { a } from "b";\n```\n\n```ts\nclient.leaveRoom("x"); // gone\n```\n\n```\nbun add -D @waits/buoy\n```\n',
     );
   });
 

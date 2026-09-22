@@ -157,7 +157,7 @@ function docsRow(mark: Mark): string | null {
   const { claim, range } = mark.anchor;
   if (mark.token) {
     const word = range.toString();
-    // What Drift read is the best quote when it is short and has the word in it.
+    // What the build read is the best quote when it is short and has the word in it.
     const quote = claim.text.replace(/\s+/g, ' ').trim();
     const inQuote = quote.length <= 160 ? quote.indexOf(word) : -1;
     if (inQuote >= 0)
@@ -392,7 +392,7 @@ function popoverHTML({
           })
           .join('')}</div>`
       : '';
-  // Buoy's own record spells a destructured parameter as its keys; Drift's slice says `options: object`.
+  // Buoy's own record spells a destructured parameter as its keys. The compact slice may say `options: object`.
   const ownSignature =
     first.specRef && !first.specRef.member && !first.specRef.replacement
       ? page?.records?.[first.specRef.export]?.signature
@@ -507,7 +507,7 @@ const routeOf = (pathname: string): string => pathname.replace(/(.)\/$/, '$1');
  *
  * @example
  * ```ts
- * import { mount } from '@driftdev/buoy';
+ * import { mount } from '@waits/buoy';
  * const unmount = mount({ data: manifest });
  * ```
  */

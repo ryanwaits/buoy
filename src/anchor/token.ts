@@ -1,5 +1,5 @@
 /**
- * The word that is wrong. A claim's range is the passage Drift read; the buoy
+ * The word that is wrong. A claim's range is the passage the build read; the buoy
  * belongs on the identifier inside it that the spec does not have. Read-only.
  */
 

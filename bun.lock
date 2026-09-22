@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@driftdev/buoy",
+      "name": "@waits/buoy",
       "dependencies": {
         "@openpkg-ts/sdk": "^0.55.2",
         "@openpkg-ts/spec": "^0.55.0",

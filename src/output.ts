@@ -162,7 +162,7 @@ function decisionLine(claim: JudgedClaim, decision: string): string {
 /**
  * The copy button's payload: a brief a coding agent can act on in any harness.
  * The reader's decisions lead; the findings follow as context, with the spec and how to
- * verify each. It never contains a rewrite; the agent does the editing, checked against Drift.
+ * verify each. It never contains a rewrite; the agent does the editing, checked against the spec.
  * A finding resolved as not a problem (`null`) is left out.
  */
 export function toPrompt(

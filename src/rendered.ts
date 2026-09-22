@@ -1,5 +1,5 @@
 /**
- * Rendered-page mode: a docs page's HTML → the markdown subset Drift reads.
+ * Rendered-page mode: a docs page's HTML → the markdown subset the build reads.
  *
  * Every docs source (markdown, MDX, TSX, a CMS) ends up as a rendered page, so
  * this is the one input that needs no per-format parser. It wants semantic
@@ -53,7 +53,7 @@ function language(pre: HTMLElement): string {
   return '';
 }
 
-/** Hand-rolled sites render code with no language, and Drift only reads fences it knows are code. */
+/** Hand-rolled sites render code with no language; only fences that are plainly code are read. */
 const sniff = (code: string): string => (looksLikeCode(code) ? 'ts' : '');
 
 const saysCode = (el: HTMLElement): boolean =>
@@ -75,7 +75,7 @@ const TITLE =
   'figcaption, [data-slot="card-title"], [data-title], [class*="title"], [class*="filename"]';
 
 /**
- * `title="AI SDK 5"` on a fence is how docs mark before/after code, and Drift reads it from
+ * `title="AI SDK 5"` on a fence is how docs mark before/after code, and the build reads it from
  * the fence's info string. Hosts render it as a bar above the `<pre>`, inside a wrapper.
  */
 function titleOf(pre: HTMLElement): string {

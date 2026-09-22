@@ -27,8 +27,8 @@ export function maxScore(claim: JudgedClaim): number {
 }
 
 /**
- * A finding is a rule hit, or a Jev score over its cut. `candidate` claims are
- * Drift's inventory and carry neither, so they never show.
+ * A finding is a rule hit, or a Jev score over its cut. Claims with neither
+ * never show.
  */
 export function isFinding(claim: JudgedClaim): boolean {
   return claim.rule !== undefined || cleared(claim).length > 0;

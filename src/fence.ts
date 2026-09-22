@@ -13,7 +13,7 @@ export const CODE_CLASS: RegExp =
 export const CODE_TAGS: RegExp = /^(DIV|SECTION|FIGURE)$/;
 
 /**
- * Plainly JS/TS: Drift only reads fences it knows are code, and a `<div>` is only
+ * Plainly JS/TS: only fences that are code are read, and a `<div>` is only
  * a code block when its text says so.
  */
 export function looksLikeCode(code: string): boolean {
