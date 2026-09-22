@@ -392,7 +392,13 @@ function popoverHTML({
           })
           .join('')}</div>`
       : '';
-  const signature = gaps && claims.length > 1 ? null : signatureOf(truthSlice(first, slices));
+  // Buoy's own record spells a destructured parameter as its keys; Drift's slice says `options: object`.
+  const ownSignature =
+    first.specRef && !first.specRef.member
+      ? page?.records?.[first.specRef.export]?.signature
+      : undefined;
+  const signature =
+    gaps && claims.length > 1 ? null : (ownSignature ?? signatureOf(truthSlice(first, slices)));
   const proof = gaps ? null : proofOf(first, signature);
   const ref = first.specRef;
   const views = viewsOf(mark, first, page, signature);
