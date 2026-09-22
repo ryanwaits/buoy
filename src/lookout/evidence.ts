@@ -176,9 +176,10 @@ const isComponent = (entry: OpenPkgExport, returns: string | undefined): boolean
 /** Every key a named type has, from its members or its schema, bases included; none when it is open. */
 function keyNames(spec: OpenPkgSpec, type: OpenPkgType): string[] {
   const names = memberNames(spec, type);
-  if (names?.size) return [...names];
-  const found = propertiesOf(type.schema, spec);
-  return found ? Object.keys(found.properties) : [];
+  const all = names?.size
+    ? [...names]
+    : Object.keys(propertiesOf(type.schema, spec)?.properties ?? {});
+  return all.filter((n) => !/^[_#~]/.test(n));
 }
 
 /** The properties a schema has, following one `$ref` to a named type when it points at one. */
@@ -363,8 +364,17 @@ export function specRecord(
           ),
         ]
       : undefined;
+  // The types a reader meets first come first: what the signature names directly (a parameter's
+  // type, the return type) before anything nested inside them.
+  const direct = new Set<string>();
+  for (const p of signature?.parameters ?? [])
+    if (p.schema?.$ref) direct.add(refName(p.schema.$ref));
+  if (signature?.returns?.schema?.$ref) direct.add(refName(signature.returns.schema.$ref));
+  const typeOrder = [...direct]
+    .filter((n) => seen.has(n))
+    .concat([...seen].filter((n) => !direct.has(n)));
   const types: Record<string, string> = {};
-  for (const typeName of [...seen].slice(0, 8)) {
+  for (const typeName of typeOrder.slice(0, 8)) {
     // OpenPkg gives same-named types their own ids (`react.Options`); a ref names the id.
     const named = spec.types?.filter((t) => t.name === typeName) ?? [];
     const found =
