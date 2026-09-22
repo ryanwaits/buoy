@@ -62,7 +62,7 @@ export const QUESTIONS: Record<QuestionId, Noul> = {
   stale: noul(
     'Does the `passage` present `export.name` as the current way to do something, even though `export` says it is deprecated or replaced?',
     '`export.deprecated` is true or `export.replacement` is set, and the passage uses or recommends it without saying it is deprecated.',
-    '`export` is not deprecated, or the passage already tells the reader it is deprecated or what replaces it. Naming it in a list of things that are supported, captured, handled or compared ("captures generateObject and streamObject calls") is neither using nor recommending it.',
+    '`export` is not deprecated, or the passage already tells the reader it is deprecated or what replaces it.',
   ),
   // `incomplete` is two questions for the same reason `inaccurate` is five: one broad
   // "would this fail?" hedged around 0.6-0.8 on real breaks.

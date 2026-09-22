@@ -106,9 +106,22 @@ const keyOf = (ask: Ask, model: string): string =>
 type Asked = Pick<Ask, 'used' | 'overloaded' | 'passage' | 'names' | 'has'> & { key: string };
 
 function toJev(answers: Record<string, number>, { used, overloaded, names, has }: Asked): Jev {
-  const scored =
+  let scored =
     'about' in answers ? combine(answers as Record<QuestionId, number>, used, overloaded) : null;
-  const missing = scored && scored.inaccurate > 0 && scored.reason === 'members' ? names() : [];
+  let missing = scored && scored.inaccurate > 0 && scored.reason === 'members' ? names() : [];
+  // Jev says a member is missing, but code read every member the passage uses and found each in
+  // the record (`isLoopFinished()` is its own export, not a method): the answer is inadmissible.
+  // Only where code could look: a record with members to check against.
+  if (
+    scored &&
+    scored.reason === 'members' &&
+    scored.inaccurate > 0 &&
+    !missing.length &&
+    has().length
+  ) {
+    scored = combine({ ...(answers as Record<QuestionId, number>), members: 0 }, used, overloaded);
+    missing = [];
+  }
   return {
     stale: scored?.stale ?? 0,
     incomplete: scored?.incomplete ?? 0,
