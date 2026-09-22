@@ -11,6 +11,7 @@ import type { Classifier, Noul } from '../sonar';
 import type { Claim, Jev, JudgedClaim, PageDocument } from '../types';
 import {
   checkableUse,
+  inFenceAt,
   knownMembers,
   type OpenPkgSpec,
   passageAt,
@@ -52,6 +53,7 @@ function askFor(claim: Claim, input: JudgeInput): Ask | null {
   // A rule hit is certain; a gap is a rule hit. Jev has no say on either.
   if (claim.kind === 'gap' || claim.rule) return null;
   const passage = passageAt(input.content, claim.locator.start.line);
+  const inFence = claim.kind === 'fence' || inFenceAt(input.content, claim.locator.start.line);
   if (!passage.trim()) return null;
   const questions: Record<string, Noul> = {};
   const heading = claim.locator.headingText;
@@ -72,12 +74,20 @@ function askFor(claim: Claim, input: JudgeInput): Ask | null {
   if (home && entry && claim.specRef) {
     state.export = specRecord(home, entry, claim.specRef.member, passage);
     Object.assign(questions, QUESTIONS);
+    // A code sample with a shaped record: whether its call passes what is required is Drift's
+    // exact check (`prose-missing-required`), and the ledger is not asked twice. Jev keeps `setup`,
+    // what code cannot see. A heading stands for its section, whose samples carry their own claims.
+    const rec = state.export as SpecRecord;
+    const shaped = rec.signature ?? rec.overloads ?? rec.parameters ?? rec.props;
+    // An intro paragraph is judged with the fence it introduces; that fence is Drift's too.
+    const hasFence = inFence || /(^|\n)\s*```/.test(passage);
+    if ((shaped && hasFence) || claim.kind === 'heading') delete questions.incomplete;
   }
   const name = claim.specRef?.member
     ? `${claim.specRef.export}.${claim.specRef.member}`
     : (claim.specRef?.export ?? '');
   const record = state.export as SpecRecord | undefined;
-  const inCode = claim.kind === 'fence';
+  const inCode = inFence;
   const used = record ? checkableUse(passage, record, inCode) : showsUse(passage, name, inCode);
   const overloaded = (record?.overloads?.length ?? 0) > 1;
   return Object.keys(questions).length

@@ -387,6 +387,49 @@ export function specRecord(
  */
 export type Use = 'whole' | 'fragment';
 
+/** A line that stands for what a sample leaves out. */
+const ELISION_LINE =
+  /^\s*(?:\/\/\s*(?:\.{3}|…)|\/\*\s*(?:\.{3}|…)[^*]*\*\/|(?:\.{3}|…)(?![\w$]))\s*[^\n]*$/;
+
+/**
+ * Calls whose object-literal argument elides at its own level, `f({ // ...\n b })` or
+ * `new X({ ... })`, are fragments: they show where a call goes, not the call. Each such call
+ * is blanked so the use check does not read it as whole. Elision inside a nested literal
+ * (`tools: { /~ ... ~/ }`, with a block comment) leaves the outer call whole.
+ */
+export function withoutElidedCalls(text: string): string {
+  let out = text;
+  const re = /[\w$.]+\s*\(\s*\{/g;
+  for (const m of text.matchAll(re)) {
+    const open = m.index + m[0].length - 1;
+    let depth = 0;
+    let end = -1;
+    for (let i = open; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '{') depth++;
+      else if (ch === '}' && --depth === 0) {
+        end = i;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    // The literal's own lines: nested braces are collapsed so their contents are not read.
+    let inner = '';
+    depth = 0;
+    for (let i = open + 1; i < end; i++) {
+      const ch = text[i];
+      if (ch === '{') depth++;
+      if (depth === 0) inner += ch;
+      if (ch === '}') depth--;
+    }
+    // A bare `...` between keys (`{ model, ... }`) elides too; a spread `...rest` does not.
+    const bare = /(^|[,{\s])(?:\.{3}|…)(?=\s*(?:[,}]|$))/m.test(inner);
+    if (bare || inner.split('\n').some((line) => ELISION_LINE.test(line)))
+      out = out.replace(text.slice(m.index, end + 1), ' '.repeat(end + 1 - m.index));
+  }
+  return out;
+}
+
 export function showsUse(passage: string, name: string, inCode = true): Use | null {
   const last = (name.split('.').pop() ?? name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const callee = name.includes('.') ? `\\.${last}` : `(?<![\\w.])(?:new\\s+)?${last}`;
@@ -396,9 +439,9 @@ export function showsUse(passage: string, name: string, inCode = true): Use | nu
   const named = /(?<![\w.$`])[\w.$]+\(\)(?!`)/g;
   // `useMutation(/* ... */)` elides its arguments: it shows that a call goes here, not the call.
   const elided = /\(\s*(?:\/\*[^*]*\*\/|\/\/[^\n]*\n|\.{3}|…)\s*\)/g;
-  const text = (inCode ? passage : passage.replace(named, ''))
-    .replace(mentions, '')
-    .replace(elided, '');
+  const text = withoutElidedCalls(
+    (inCode ? passage : passage.replace(named, '')).replace(mentions, '').replace(elided, ''),
+  );
   const has = (pattern: string): boolean => new RegExp(pattern).test(text);
   if (has(`${callee}\\s*(?:<[^>()]*>)?\\s*\\(`)) return 'whole';
   if (!has(`(?<!\\w)<${last}[\\s/>]`)) return null;
@@ -672,6 +715,16 @@ export function checkableUse(passage: string, record: SpecRecord, inCode = true)
  * fence also brings the paragraph that introduces it, which is usually where
  * the docs say what the code is for. A heading brings the section it opens.
  */
+/** Whether `line` (1-based) sits inside a fenced code block. */
+export function inFenceAt(markdown: string, line: number): boolean {
+  let open = false;
+  const lines = markdown.split('\n');
+  for (let i = 0; i < Math.min(line - 1, lines.length); i++) {
+    if (lines[i].trimStart().startsWith('```')) open = !open;
+  }
+  return open;
+}
+
 export function passageAt(markdown: string, line: number): string {
   const lines = markdown.split('\n');
   const fences: [number, number][] = [];

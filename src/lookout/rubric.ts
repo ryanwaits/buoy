@@ -151,7 +151,7 @@ export function combine(
     incomplete:
       used === 'whole' && !counter
         ? Math.max(
-            overloaded && p.incomplete < INCOMPLETE_OVERLOADED_MIN ? 0 : p.incomplete,
+            overloaded && (p.incomplete ?? 0) < INCOMPLETE_OVERLOADED_MIN ? 0 : (p.incomplete ?? 0),
             (p.setup ?? 0) >= SETUP_MIN ? p.setup : 0,
           )
         : 0,

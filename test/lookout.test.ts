@@ -709,3 +709,26 @@ test('a destructured parameter reads as its keys, from an inline shape or a name
   expect(room.props?.map((p) => p.name)).toEqual(['roomId', 'userId', 'children']);
   expect(room.signature).toBe('<RoomProvider roomId userId children />');
 });
+
+test('a call whose options literal elides at its own level is a fragment, not a whole use', () => {
+  expect(
+    showsUse(
+      'const r = await generateText({\n  // ...\n  output: Output.object({ schema }),\n});',
+      'generateText',
+    ),
+  ).toBeNull();
+  expect(showsUse('dynamicTool({\n  /* ... */\n})', 'dynamicTool')).toBeNull();
+  expect(showsUse('new ToolLoopAgent({ ... })', 'ToolLoopAgent')).toBeNull();
+  expect(
+    showsUse(
+      "so string IDs work: `streamTranscribe({ model: 'openai/whisper', ... })`",
+      'streamTranscribe',
+      false,
+    ),
+  ).toBeNull();
+  expect(showsUse('f({ ...rest, a: 1 })', 'f')).toBe('whole');
+  // An elision inside a nested literal does not make the outer call a fragment.
+  expect(showsUse('generateText({\n  model,\n  tools: { /* ... */ },\n});', 'generateText')).toBe(
+    'whole',
+  );
+});
