@@ -5,7 +5,7 @@
     "": {
       "name": "@driftdev/buoy",
       "dependencies": {
-        "@driftdev/sdk": "^1.16.12",
+        "@driftdev/sdk": "^1.16.13",
         "@openpkg-ts/sdk": "^0.54.11",
         "@openpkg-ts/spec": "^0.54.9",
         "node-html-parser": "^9.0.4",
@@ -99,7 +99,7 @@
 
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
-    "@driftdev/sdk": ["@driftdev/sdk@1.16.12", "", { "dependencies": { "@openpkg-ts/sdk": "^0.54.11", "@openpkg-ts/spec": "^0.54.9", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "remark-mdx": "^3.1.0", "remark-parse": "^11.0.0", "typescript": "^5.0.0", "unified": "^11.0.5", "unist-util-visit": "^5.0.0", "zod": "^4.2.1" } }, "sha512-e5HMMZ+h7kTmhYOY81aeGfecGw/mDxa765c0tCzsoMbb363UOlZCrzuz2Rr61FrS/bRWgobL24LdVdZtNgHuZQ=="],
+    "@driftdev/sdk": ["@driftdev/sdk@1.16.13", "", { "dependencies": { "@openpkg-ts/sdk": "^0.54.11", "@openpkg-ts/spec": "^0.54.9", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "remark-mdx": "^3.1.0", "remark-parse": "^11.0.0", "typescript": "^5.0.0", "unified": "^11.0.5", "unist-util-visit": "^5.0.0", "zod": "^4.2.1" } }, "sha512-SXJLNzAWUAK9qN0euzi7bvVZBVi4bj72bnvG+e6ATB7rvcyQjkwX/wqhnfb73CHHV3BVd6hg1upkZPnpcbPAFg=="],
 
     "@emnapi/core": ["@emnapi/core@1.11.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA=="],
 
