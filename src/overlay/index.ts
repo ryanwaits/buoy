@@ -5,7 +5,7 @@
 
 import { anchorClaims } from '../anchor';
 import { BLOCK, codeLine, fenceOf } from '../anchor/token';
-import { offending, sentence, signatureOf, toPrompt, truthSlice } from '../output';
+import { offending, plainDoc, sentence, signatureOf, toPrompt, truthSlice } from '../output';
 import {
   DIMENSIONS,
   type Evidence,
@@ -134,7 +134,7 @@ function proofOf(
   if (ref?.deprecated && ref.deprecationNote)
     return {
       label: 'spec',
-      html: `@deprecated ${esc(clip(ref.deprecationNote, 140))}`,
+      html: `@deprecated ${esc(clip(plainDoc(ref.deprecationNote), 140))}`,
       whole: false,
     };
   if (!signature) return null;
@@ -301,7 +301,7 @@ function viewsOf(
         : '',
       record?.returns && !record.props ? `<dt>returns</dt><dd>${esc(record.returns)}</dd>` : '',
       ref?.deprecated
-        ? `<dt></dt><dd>@deprecated ${esc(ref.deprecationNote ?? '')}${ref.replacement ? ` → ${esc(ref.replacement)}` : ''}</dd>`
+        ? `<dt></dt><dd>@deprecated ${esc(plainDoc(ref.deprecationNote ?? ''))}${ref.replacement ? ` → ${esc(ref.replacement)}` : ''}</dd>`
         : '',
     ].join('');
     views.push({

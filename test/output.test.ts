@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { offending, sentence, toPrompt } from '../src/output';
+import { offending, plainDoc, sentence, toPrompt } from '../src/output';
 import { isHidden, issueCount, kindOf } from '../src/policy';
 import type { JudgedClaim, JudgedPage } from '../src/types';
 
@@ -149,4 +149,11 @@ test('a gap says what kind of member is missing, and tells it from an option key
   expect(sentence(gap, 'no key here', 'method')).toBe(
     '`LivelyServer` has a `port()` method this page never documents.',
   );
+});
+
+test('JSDoc links read as their text', () => {
+  expect(
+    plainDoc('Use {@link cuid2 `z.cuid2()`} instead. See {@link https://x.dev|the notes}.'),
+  ).toBe('Use z.cuid2() instead. See the notes.');
+  expect(plainDoc('{@link Foo}')).toBe('Foo');
 });

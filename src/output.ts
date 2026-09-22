@@ -18,6 +18,17 @@ export function offending(claim: JudgedClaim): string[] {
   return [...(claim.rule?.issue.matchAll(/'<?([\w$.]+)>?'/g) ?? [])].map((m) => m[1]);
 }
 
+/** JSDoc as a reader would see it: `{@link cuid2 \`z.cuid2()\`}` reads `z.cuid2()`, `{@link Foo}` reads `Foo`. */
+export function plainDoc(text: string): string {
+  return text
+    .replace(
+      /\{@(?:link|linkcode|linkplain)\s+([^\s}|]+)(?:\s*\|?\s*([^}]*))?\}/g,
+      (_, target: string, label: string) => (label ?? '').trim().replace(/^`|`$/g, '') || target,
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const KIND_WORD: Record<string, string> = {
   getter: 'getter',
   setter: 'setter',
