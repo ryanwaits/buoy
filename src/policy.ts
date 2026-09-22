@@ -58,6 +58,7 @@ const RULE_KINDS: Record<string, Kind> = {
   'prose-deprecated-reference': 'deprecated',
   'deprecated-mismatch': 'deprecated',
   'prose-unknown-key': 'args',
+  'prose-declared-key': 'name',
   'prose-arity-mismatch': 'args',
   'prose-missing-required': 'args',
   'prose-literal-type-mismatch': 'args',

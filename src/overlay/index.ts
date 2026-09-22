@@ -91,6 +91,9 @@ function evidenceHTML(claims: JudgedClaim[], aside: string): string {
 
 /** A signature's parameters, split at the top level: `f(a: T, b?: { x: U }): R` gives `a: T` and `b?: { x: U }`. */
 export function paramsOf(signature: string): { name: string; text: string }[] {
+  // `f({ a: T, b?: U })`: the keys of a destructured parameter are its parameters.
+  const braced = /^([^(]*\()\s*\{\s*([\s\S]*?)\s*\}\s*(\)[^)]*)$/.exec(signature);
+  if (braced) return paramsOf(`${braced[1]}${braced[2]}${braced[3]}`);
   const open = signature.indexOf('(');
   if (open < 0) return [];
   const parts: string[] = [];

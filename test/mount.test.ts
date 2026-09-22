@@ -49,4 +49,9 @@ test('a signature splits into its own parameters, whatever they contain', () => 
   expect(paramsOf(sig).map((p) => p.name)).toEqual(['roomId', 'opts', 'cb', 'rest']);
   expect(paramsOf(sig)[2].text).toBe('cb: (x: number, y: number) => void');
   expect(paramsOf('PresenceUser')).toEqual([]);
+  expect(
+    paramsOf('embed({ model: string, value: string, headers?: object }): object').map(
+      (p) => p.name,
+    ),
+  ).toEqual(['model', 'value', 'headers']);
 });

@@ -38,6 +38,7 @@ export type SpecRecord = {
 };
 
 type Schema = {
+  default?: unknown;
   type?: string | string[];
   $ref?: string;
   'x-ts-type'?: string;
@@ -56,15 +57,20 @@ type Schema = {
   enum?: unknown[];
   const?: unknown;
 };
+type SigParam = {
+  name: string;
+  schema?: Schema;
+  required?: boolean;
+  rest?: boolean;
+  default?: unknown;
+  /** OpenPkg 0.55: the source destructures this one object parameter; its keys are what a caller writes. */
+  'x-ts-destructured'?: boolean;
+};
 type Signature = {
-  parameters?: {
-    name: string;
-    schema?: Schema;
-    required?: boolean;
-    rest?: boolean;
-    default?: unknown;
-  }[];
+  parameters?: SigParam[];
   returns?: { schema?: Schema };
+  /** Set by `unpacked`: the parameters are the keys of one destructured object. */
+  braces?: boolean;
 };
 type Member = {
   name: string;
@@ -162,6 +168,65 @@ const isComponent = (entry: OpenPkgExport, returns: string | undefined): boolean
   /^[A-Z]/.test(entry.localName ?? entry.name) &&
   /ReactNode|Element|JSX/.test(returns ?? '');
 
+/** The properties a schema has, following one `$ref` to a named type when it points at one. */
+function propertiesOf(
+  schema: Schema | undefined,
+  spec: OpenPkgSpec,
+): { properties: Record<string, Schema>; required: Set<string> } | null {
+  if (!schema) return null;
+  if (schema.properties)
+    return { properties: schema.properties, required: new Set(schema.required ?? []) };
+  if (schema.$ref) {
+    const name = refName(schema.$ref);
+    const named =
+      spec.types?.find((t) => t.id === name || t.name === name) ??
+      spec.exports.find((e) => e.name === name);
+    if (named?.schema?.properties)
+      return {
+        properties: named.schema.properties,
+        required: new Set(named.schema.required ?? []),
+      };
+    if (named?.members?.length)
+      return {
+        properties: Object.fromEntries(named.members.map((m) => [m.name, m.schema ?? {}])),
+        required: new Set(named.members.filter((m) => !m.flags?.optional).map((m) => m.name)),
+      };
+  }
+  const parts = schema.allOf ?? [];
+  if (parts.length) {
+    const merged: Record<string, Schema> = {};
+    const required = new Set<string>();
+    for (const part of parts) {
+      const found = propertiesOf(part, spec);
+      if (!found) continue;
+      Object.assign(merged, found.properties);
+      for (const r of found.required) required.add(r);
+    }
+    if (Object.keys(merged).length) return { properties: merged, required };
+  }
+  return null;
+}
+
+/**
+ * A signature as a caller sees it. A destructured object parameter is spelled as its
+ * keys, which is what the docs write and what a reader checks: `embed({ model, value })`,
+ * `<RoomProvider roomId userId>`. A destructured parameter whose keys the spec cannot
+ * name stays as it is: nothing to check.
+ */
+export function unpacked(signature: Signature, spec: OpenPkgSpec): Signature {
+  const only = signature.parameters?.length === 1 ? signature.parameters[0] : undefined;
+  if (!only?.['x-ts-destructured']) return signature;
+  const found = propertiesOf(only.schema, spec);
+  if (!found) return signature;
+  const parameters: SigParam[] = Object.entries(found.properties).map(([name, schema]) => ({
+    name,
+    schema,
+    required: found.required.has(name),
+    ...(schema.default === undefined ? {} : { default: schema.default }),
+  }));
+  return { ...signature, parameters, braces: true };
+}
+
 function signatureOf(
   name: string,
   signature: Signature | undefined,
@@ -176,7 +241,8 @@ function signatureOf(
       `${p.rest ? '...' : ''}${p.name}${p.required === false && !p.rest ? '?' : ''}: ${renderType(p.schema, seen)}`,
   );
   const returns = known(signature.returns ? renderType(signature.returns.schema, seen) : undefined);
-  return `${name}${generics}(${params.join(', ')})${returns ? `: ${returns}` : ''}`;
+  const list = signature.braces ? `{ ${params.join(', ')} }` : params.join(', ');
+  return `${name}${generics}(${list})${returns ? `: ${returns}` : ''}`;
 }
 
 const isPublic = (m: Member): boolean =>
@@ -204,7 +270,9 @@ export function specRecord(
   const target = member ? entry.members?.find((m) => m.name === member) : undefined;
   const called = displayName(entry);
   const name = target ? `${called}.${target.name}` : called;
-  const signature = (target ?? entry).signatures?.[0];
+  const signature = (target ?? entry).signatures?.[0]
+    ? unpacked((target ?? entry).signatures?.[0] as Signature, spec)
+    : undefined;
   const docs = new Map(
     (entry.tags ?? []).flatMap((t) => (t.param ? [[t.param.name, t.param.description]] : [])),
   );
@@ -249,7 +317,7 @@ export function specRecord(
 
   // Docs written against the second overload are not wrong about the first. Rendered before
   // `types`, so the option types only a later overload mentions get spelled out too.
-  const all = (target ?? entry).signatures ?? [];
+  const all = ((target ?? entry).signatures ?? []).map((sig) => unpacked(sig as Signature, spec));
   const overloads =
     all.length > 1 && !component
       ? [

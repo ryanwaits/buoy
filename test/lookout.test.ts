@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   checkableUse,
+  type OpenPkgSpec,
   passageAt,
   renderType,
   showsUse,
@@ -633,4 +634,78 @@ test('in prose, `name()` with nothing inside names the function; in code it is t
   ).toBeNull();
   expect(showsUse('Use generateImage({ model }) here.', 'generateImage', false)).toBe('whole');
   expect(showsUse('const id = generateId();', 'generateId', true)).toBe('whole');
+});
+
+test('a destructured parameter reads as its keys, from an inline shape or a named one', () => {
+  const spec = {
+    exports: [
+      {
+        name: 'embed',
+        kind: 'function',
+        signatures: [
+          {
+            parameters: [
+              {
+                name: 'options',
+                required: true,
+                'x-ts-destructured': true,
+                schema: {
+                  type: 'object',
+                  properties: {
+                    model: { type: 'string' },
+                    value: { type: 'string' },
+                    headers: { type: 'object' },
+                  },
+                  required: ['model', 'value'],
+                },
+              },
+            ],
+            returns: { schema: { type: 'object' } },
+          },
+        ],
+      },
+      {
+        name: 'RoomProvider',
+        kind: 'function',
+        signatures: [
+          {
+            parameters: [
+              {
+                name: 'options',
+                required: true,
+                'x-ts-destructured': true,
+                schema: { $ref: '#/types/RoomProviderProps' },
+              },
+            ],
+            returns: { schema: { 'x-ts-type': 'ReactNode' } },
+          },
+        ],
+      },
+    ],
+    types: [
+      {
+        name: 'RoomProviderProps',
+        schema: {
+          type: 'object',
+          properties: {
+            roomId: { type: 'string' },
+            userId: { type: 'string' },
+            children: { 'x-ts-type': 'ReactNode' },
+          },
+          required: ['roomId', 'userId', 'children'],
+        },
+      },
+    ],
+  } as unknown as OpenPkgSpec;
+  const embed = specRecord(spec, spec.exports[0]);
+  expect(embed.signature).toBe('embed({ model: string, value: string, headers?: object }): object');
+  expect(embed.parameters?.map((p) => `${p.name}${p.required ? '' : '?'}`)).toEqual([
+    'model',
+    'value',
+    'headers?',
+  ]);
+  const room = specRecord(spec, spec.exports[1]);
+  expect(room.kind).toBe('React component');
+  expect(room.props?.map((p) => p.name)).toEqual(['roomId', 'userId', 'children']);
+  expect(room.signature).toBe('<RoomProvider roomId userId children />');
 });
