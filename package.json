@@ -1,6 +1,6 @@
 {
   "name": "@waits/buoy",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Docs review overlay. OpenPkg is the record, Buoy pins where the page disagrees.",
   "keywords": [
     "docs",
