@@ -1,5 +1,13 @@
 # @driftdev/buoy
 
+## 0.3.1
+
+### Patch Changes
+
+- eb4a79a: On Drift 1.17.0: Buoy no longer pulls in `zod`, so it installs cleanly inside repos whose workspace is `zod` itself.
+- 08ab02d: A deprecation note reads as the reader would see it: `{@link cuid2 `z.cuid2()`}` shows as `z.cuid2()`.
+- f87ee18: A resolved buoy keeps its solid colour, with a tick in place of the count, instead of inverting.
+
 ## 0.3.0
 
 ### Minor Changes
