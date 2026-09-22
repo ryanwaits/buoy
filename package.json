@@ -1,6 +1,6 @@
 {
   "name": "@driftdev/buoy",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Docs review overlay. Drift finds it, Buoy marks it: spec-checked findings pinned on your rendered docs page.",
   "keywords": [
     "docs",
