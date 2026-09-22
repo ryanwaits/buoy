@@ -5,7 +5,7 @@ import type { Anchor, JudgedClaim } from '../types';
 /**
  * What gets a buoy: a place, not a finding. Findings on the same span share one
  * (an unknown prop and a missing one on one tag are one stop for the reader), and
- * the members a section never mentions share one `+N`. The popover lists them.
+ * the members a section never documents share one `+N`. The popover lists them.
  */
 export type Mark = {
   id: string;

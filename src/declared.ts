@@ -31,3 +31,22 @@ export function declaredAt(
   }
   return Object.keys(declared).length ? declared : undefined;
 }
+
+/** What kind of thing a member is, in a reader's word: OpenPkg's `getter`, `method`, `property`... */
+export function memberKinds(
+  claims: Pick<Claim, 'specRef' | 'kind'>[],
+  specs: OpenPkgSpec[],
+): Record<string, string> | undefined {
+  const kinds: Record<string, string> = {};
+  for (const claim of claims) {
+    const ref = claim.specRef;
+    if (claim.kind !== 'gap' || !ref?.member) continue;
+    const entry = [
+      ...specs.map((spec) => spec.exports.find((e) => e.name === ref.export)),
+      ...specs.map((spec) => spec.types?.find((t) => t.name === ref.export)),
+    ].find(Boolean);
+    const member = entry?.members?.find((m) => m.name === ref.member);
+    if (member?.kind) kinds[`${ref.export}.${ref.member}`] = member.kind;
+  }
+  return Object.keys(kinds).length ? kinds : undefined;
+}

@@ -109,6 +109,7 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .members code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .members b{font-weight:500;color:var(--tx)}
 .members span{color:var(--tx3)}
+.members i{margin-left:8px;font:500 10.5px/1 system-ui,sans-serif;font-style:normal;color:var(--tx3)}
 .members code.bad{text-decoration:line-through;text-decoration-color:var(--tx3)}
 .members code.bad span{text-decoration:none;display:inline-block}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:11.5px;line-height:1.5;color:var(--tx2)}

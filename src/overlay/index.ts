@@ -366,8 +366,14 @@ function popoverHTML({
   const gaps = first.kind === 'gap';
   const word = mark.token ? mark.anchor.range.toString() : '';
   const types = [...new Set(claims.map((c) => c.specRef?.export).filter(Boolean))];
+  // A gap is about the whole page: the name may well appear on it as something else.
+  const pageText =
+    (mark.anchor.range.startContainer.parentElement?.closest('article, main') ?? document.body)
+      .textContent ?? '';
+  const kindOfMember = (c: JudgedClaim): string | undefined =>
+    c.specRef?.member ? page?.kinds?.[`${c.specRef.export}.${c.specRef.member}`] : undefined;
   const lead = gaps
-    ? `<p class="say">${claims.length === 1 ? say(sentence(first)) : `${claims.length} members of ${types.map((t) => `<code>${esc(String(t))}</code>`).join(', ')} are never mentioned in this section.`}</p>`
+    ? `<p class="say">${claims.length === 1 ? say(sentence(first, pageText, kindOfMember(first))) : `${claims.length} members of ${types.map((t) => `<code>${esc(String(t))}</code>`).join(', ')} are never documented in this section.`}</p>`
     : `<p class="say">${say(sentence(first, context), word)}</p>`;
   // A section's gaps: the names, under Details, one per line.
   const members =
@@ -378,7 +384,8 @@ function popoverHTML({
               signatureOf(truthSlice(c, slices)) ?? c.specRef?.member ?? c.text,
               types.length === 1 ? String(types[0]) : undefined,
             );
-            return `<code><b>${esc(name)}</b><span>${esc(params)}</span></code>`;
+            const kind = kindOfMember(c);
+            return `<code><b>${esc(name)}</b><span>${esc(params)}</span>${kind ? `<i>${esc(kind)}</i>` : ''}</code>`;
           })
           .join('')}</div>`
       : '';
@@ -633,7 +640,7 @@ export function mount(options: MountOptions): () => void {
       const label = done
         ? 'Resolved'
         : gap
-          ? `${n} never mentioned in this section`
+          ? `${n} never documented in this section`
           : n > 1
             ? `${n} findings here`
             : 'Finding';

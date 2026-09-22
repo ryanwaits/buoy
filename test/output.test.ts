@@ -129,3 +129,24 @@ test('the same issue in two places is one decision; the filter hides by evidence
   expect(isHidden(unknownProp, new Set(['likely', 'says']))).toBe(false);
   expect(isHidden(unknownProp, new Set(['args']))).toBe(true);
 });
+
+test('a gap says what kind of member is missing, and tells it from an option key of the same name', () => {
+  const gap = claim({
+    kind: 'gap',
+    text: 'port',
+    specRef: { export: 'LivelyServer', member: 'port' },
+    rule: {
+      type: 'spec-not-in-claims',
+      issue: "Spec member 'LivelyServer.port' is not mentioned on this page",
+    },
+  });
+  expect(sentence(gap)).toBe(
+    '`LivelyServer.port` is in the spec, but this page never documents it.',
+  );
+  expect(sentence(gap, 'const s = new LivelyServer({ port: 1999 });', 'getter')).toBe(
+    '`LivelyServer` has a `port` getter this page never documents. The `port:` on this page is an option key, not the getter.',
+  );
+  expect(sentence(gap, 'no key here', 'method')).toBe(
+    '`LivelyServer` has a `port()` method this page never documents.',
+  );
+});

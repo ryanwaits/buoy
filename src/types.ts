@@ -46,6 +46,8 @@ export type JudgedPage = Omit<PageDocument, 'claims'> & {
   excerpts?: Record<string, Excerpt>;
   /** The spec record each export was checked against, keyed by export name. Build-time only. */
   records?: Record<string, SpecRecord>;
+  /** What kind of member each undocumented one is (`getter`, `method`, `property`), keyed by `Export.member`. */
+  kinds?: Record<string, string>;
 };
 
 /** Written by `buoy build`. Routes are URL pathnames without a trailing slash. */

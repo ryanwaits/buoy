@@ -12,7 +12,7 @@ import type { ApiSpec } from '@driftdev/sdk/types';
 import { extract } from '@openpkg-ts/sdk';
 import { normalize } from '@openpkg-ts/spec';
 import { type Config, entryFor, entryPath } from './config';
-import { declaredAt } from './declared';
+import { declaredAt, memberKinds } from './declared';
 import { excerptsFor } from './excerpts';
 import { type OpenPkgSpec, type SpecRecord, specRecord } from './lookout/evidence';
 import { type JudgeCache, judge } from './lookout/judge';
@@ -155,12 +155,14 @@ async function build(configPath: string): Promise<void> {
       const declared = declaredAt(page.claims, [spec, ...also], base);
       const excerpts = declared ? excerptsFor(page.claims, declared, base) : undefined;
       const records = recordsFor(page.claims, [spec, ...also]);
+      const kinds = memberKinds(page.claims, [spec, ...also]);
       return {
         ...page,
         source: { mode, entry },
         ...(declared ? { declared } : {}),
         ...(excerpts ? { excerpts } : {}),
         ...(records ? { records } : {}),
+        ...(kinds ? { kinds } : {}),
       };
     });
     findings += pages.flatMap((p) => p.claims).length;

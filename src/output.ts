@@ -18,14 +18,44 @@ export function offending(claim: JudgedClaim): string[] {
   return [...(claim.rule?.issue.matchAll(/'<?([\w$.]+)>?'/g) ?? [])].map((m) => m[1]);
 }
 
+const KIND_WORD: Record<string, string> = {
+  getter: 'getter',
+  setter: 'setter',
+  method: 'method',
+  property: 'property',
+  field: 'property',
+  accessor: 'accessor',
+};
+
+/**
+ * A member the page never documents. Says what kind of thing it is, because the
+ * same name often appears on the page as something else: `port: 1999` is the
+ * constructor option, not the `port` getter the reader gets back.
+ */
+function gapSentence(claim: JudgedClaim, context: string | undefined, kind?: string): string {
+  const ref = claim.specRef;
+  if (!ref?.member)
+    return `\`${subject(claim)}\` is in the spec, but this page never documents it.`;
+  const word = kind ? KIND_WORD[kind] : undefined;
+  const shown = word === 'method' ? `${ref.member}()` : ref.member;
+  const head = word
+    ? `\`${ref.export}\` has a \`${shown}\` ${word} this page never documents.`
+    : `\`${ref.export}.${ref.member}\` is in the spec, but this page never documents it.`;
+  // The name written as a key (`port:`, `port?:`) is an option or a field of some other shape.
+  const asKey = context && new RegExp(`(^|[\\s{,(])${ref.member}\\s*\\??:`).test(context);
+  return asKey && word && word !== 'property'
+    ? `${head} The \`${ref.member}:\` on this page is an option key, not the ${word}.`
+    : head;
+}
+
 /**
  * What is wrong, in one sentence, with identifiers in backticks. A code template:
  * the popover and the copied prompt both say this. `context` is the text around
  * the claim, when the caller has it: it tells a call from a field.
  */
-export function sentence(claim: JudgedClaim, context?: string): string {
+export function sentence(claim: JudgedClaim, context?: string, kind?: string): string {
   const name = subject(claim);
-  if (claim.kind === 'gap') return `\`${name}\` is in the spec, but this page never mentions it.`;
+  if (claim.kind === 'gap') return gapSentence(claim, context, kind);
   if (claim.rule) return claim.rule.issue.replace(/'([^'\s]+)'/g, '`$1`');
   const top = topDimension(claim);
   if (top === 'stale') {
@@ -80,7 +110,7 @@ const GROUND_RULES = `## Ground rules
 - Verify before you edit. For each finding, read the real export with the command on its "Verify" line. One lookup per claim; never from memory, never by grepping source. If the \`drift\` skill or the \`drift mcp\` server is available in your harness, use it instead of the raw CLI.
 - **Rule** findings are deterministic detector hits. Treat them as true unless the lookup contradicts them. If it does, do not edit: report it as a false positive.
 - **Jev** findings are probabilities (stale, incomplete, inaccurate), not verdicts. Check each against the spec first. Skip the ones that are fine and say why.
-- "Missing from page" means the spec exports it and the page never mentions it. Decide whether this page should document it. If not, say so instead of padding the page.
+- "Never documented" means the spec has it and the page never documents it. Decide whether this page should document it. If not, say so instead of padding the page.
 - Smallest edit that makes the claim true. Keep the author's voice and structure. Leave sections with no finding alone.
 - If the docs look right and the spec looks wrong, stop and tell me. Do not "fix" either one.`;
 

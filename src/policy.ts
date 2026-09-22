@@ -47,7 +47,7 @@ export const KINDS = {
   args: 'Arguments and props',
   deprecated: 'Deprecated',
   says: 'Says what the spec does not',
-  gap: 'Never mentioned',
+  gap: 'Never documented',
 } as const;
 
 export type Kind = keyof typeof KINDS;
