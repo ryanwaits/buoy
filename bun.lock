@@ -5,8 +5,8 @@
     "": {
       "name": "@driftdev/buoy",
       "dependencies": {
-        "@driftdev/sdk": "^1.18.1",
-        "@openpkg-ts/sdk": "^0.55.1",
+        "@driftdev/sdk": "^1.19.2",
+        "@openpkg-ts/sdk": "^0.55.2",
         "@openpkg-ts/spec": "^0.55.0",
         "node-html-parser": "^9.0.4",
       },
@@ -99,7 +99,7 @@
 
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
-    "@driftdev/sdk": ["@driftdev/sdk@1.18.1", "", { "dependencies": { "@openpkg-ts/sdk": "^0.55.1", "@openpkg-ts/spec": "^0.55.0", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "remark-mdx": "^3.1.0", "remark-parse": "^11.0.0", "typescript": "^5.0.0", "unified": "^11.0.5", "unist-util-visit": "^5.0.0" } }, "sha512-JFZBNDLYAIFN46zAADIcArNbEy5+/ie2QRAWbgHf+OyT6Gj0nqv5wthcTQlqpxIVaZ+p8bWkuWO89XXD7MUEDg=="],
+    "@driftdev/sdk": ["@driftdev/sdk@1.19.2", "", { "dependencies": { "@openpkg-ts/sdk": "^0.55.2", "@openpkg-ts/spec": "^0.55.0", "ajv": "^8.17.1", "ajv-formats": "^3.0.1", "remark-mdx": "^3.1.0", "remark-parse": "^11.0.0", "typescript": "^5.0.0", "unified": "^11.0.5", "unist-util-visit": "^5.0.0" } }, "sha512-Il0e8APU8NB8FUCEmkQz0sjFF9ekv8bPu0QnZByvnJ1o2GH47da9Q2dN65Nm2WBjmbvujzeHlzihA4+guNYNJA=="],
 
     "@emnapi/core": ["@emnapi/core@1.11.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA=="],
 
@@ -123,7 +123,7 @@
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
-    "@openpkg-ts/sdk": ["@openpkg-ts/sdk@0.55.1", "", { "dependencies": { "@openpkg-ts/spec": "^0.55.0", "picomatch": "4.0.3", "typescript": "^5.0.0 || ^6.0.0" }, "peerDependencies": { "shiki": "^1.0.0" }, "optionalPeers": ["shiki"] }, "sha512-hqL2jxRkwzzwQKdQ7AzMwUUbkz/e7/hCc5OT/HjVhTK2ogk1TfdFDp0xZ+xmVgJ9NURIs/vO+S/5rGiAqRuitQ=="],
+    "@openpkg-ts/sdk": ["@openpkg-ts/sdk@0.55.2", "", { "dependencies": { "@openpkg-ts/spec": "^0.55.0", "picomatch": "4.0.3", "typescript": "^5.0.0 || ^6.0.0" }, "peerDependencies": { "shiki": "^1.0.0" }, "optionalPeers": ["shiki"] }, "sha512-aySid2VGWPVt64nT/HD5pekivaQoEy3+kK+gp502oaKPGN5PXRFCbXl2050XY3Jw2PikOneT7/EUTLtlwWg/lA=="],
 
     "@openpkg-ts/spec": ["@openpkg-ts/spec@0.55.0", "", { "dependencies": { "ajv": "^8.17.1", "ajv-formats": "^3.0.1" } }, "sha512-mVRsq2wDjxYhRMEw+FL+extuS3Mnu22i8/KEiaCZ/LIuT/AcFDE4D1e5388DvogW30HtZJFmMmUBqgB6ywkMxQ=="],
 

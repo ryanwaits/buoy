@@ -57,8 +57,8 @@
     "release": "bun run build && changeset publish"
   },
   "dependencies": {
-    "@driftdev/sdk": "^1.18.1",
-    "@openpkg-ts/sdk": "^0.55.1",
+    "@driftdev/sdk": "^1.19.2",
+    "@openpkg-ts/sdk": "^0.55.2",
     "@openpkg-ts/spec": "^0.55.0",
     "node-html-parser": "^9.0.4"
   },
