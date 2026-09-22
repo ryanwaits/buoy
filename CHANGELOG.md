@@ -1,5 +1,17 @@
 # @driftdev/buoy
 
+## 0.4.0
+
+### Minor Changes
+
+- d921767: A function that destructures one options object (`embed({ model, value })`, a React component's props) is read as its keys: the spec record shows `embed({ model: string, value: string, … })`, a component shows `<RoomProvider roomId userId … />`, and the card's proof line names the keys. Needs OpenPkg 0.55, which emits the parameter as one `x-ts-destructured` entry. `prose-declared-key` (Drift 1.18) files under "Wrong name or import".
+
+### Patch Changes
+
+- 4aca8b3: On Drift 1.18 and OpenPkg 0.55: a receiver imported from another package is never checked, a printed `interface X { … }` documents its keys and a wrong key in it is reported, an elided `{ // ... }` literal is not missing-required, and options objects are checked key by key.
+- 56490fa: Sidebar dots follow their nav row in the same paint, and stay inside the sidebar's scrollport.
+- 8d59443: A bare `name()` in prose names the function. It is a call only in code, or when the arguments are written out.
+
 ## 0.3.1
 
 ### Patch Changes
