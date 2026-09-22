@@ -626,3 +626,11 @@ test('unknownMembers: an open type can have any member', () => {
   const external = { exports: [child], types: [{ name: 'Base', external: true }] };
   expect(unknownMembers(passage, external, child)).toEqual([]);
 });
+
+test('in prose, `name()` with nothing inside names the function; in code it is the call', () => {
+  expect(
+    showsUse('generateImage() Generate images from a prompt.', 'generateImage', false),
+  ).toBeNull();
+  expect(showsUse('Use generateImage({ model }) here.', 'generateImage', false)).toBe('whole');
+  expect(showsUse('const id = generateId();', 'generateId', true)).toBe('whole');
+});

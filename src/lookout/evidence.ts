@@ -319,13 +319,18 @@ export function specRecord(
  */
 export type Use = 'whole' | 'fragment';
 
-export function showsUse(passage: string, name: string): Use | null {
+export function showsUse(passage: string, name: string, inCode = true): Use | null {
   const last = (name.split('.').pop() ?? name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const callee = name.includes('.') ? `\\.${last}` : `(?<![\\w.])(?:new\\s+)?${last}`;
   const mentions = /(?<!`)`(?:[\w.$]+\(\)|<\/?[\w.$]+\s*\/?>)`(?!`)/g;
+  // In prose, `generateImage()` with nothing inside is how docs name a function: a card title,
+  // a list entry. It shows no call to check. In code it is the call, arguments and all.
+  const named = /(?<![\w.$`])[\w.$]+\(\)(?!`)/g;
   // `useMutation(/* ... */)` elides its arguments: it shows that a call goes here, not the call.
   const elided = /\(\s*(?:\/\*[^*]*\*\/|\/\/[^\n]*\n|\.{3}|…)\s*\)/g;
-  const text = passage.replace(mentions, '').replace(elided, '');
+  const text = (inCode ? passage : passage.replace(named, ''))
+    .replace(mentions, '')
+    .replace(elided, '');
   const has = (pattern: string): boolean => new RegExp(pattern).test(text);
   if (has(`${callee}\\s*(?:<[^>()]*>)?\\s*\\(`)) return 'whole';
   if (!has(`(?<!\\w)<${last}[\\s/>]`)) return null;
@@ -589,9 +594,9 @@ export function unknownMembers(passage: string, spec: OpenPkgSpec, entry: OpenPk
  * `setAutoFreeze` is a bound method: the spec has its name and description and no
  * signature, so "passes an option the record does not define" has nothing to stand on.
  */
-export function checkableUse(passage: string, record: SpecRecord): Use | null {
+export function checkableUse(passage: string, record: SpecRecord, inCode = true): Use | null {
   const shaped = record.signature ?? record.overloads ?? record.parameters ?? record.props;
-  return shaped ? showsUse(passage, record.name) : null;
+  return shaped ? showsUse(passage, record.name, inCode) : null;
 }
 
 /**

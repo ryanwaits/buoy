@@ -77,7 +77,8 @@ function askFor(claim: Claim, input: JudgeInput): Ask | null {
     ? `${claim.specRef.export}.${claim.specRef.member}`
     : (claim.specRef?.export ?? '');
   const record = state.export as SpecRecord | undefined;
-  const used = record ? checkableUse(passage, record) : showsUse(passage, name);
+  const inCode = claim.kind === 'fence';
+  const used = record ? checkableUse(passage, record, inCode) : showsUse(passage, name, inCode);
   const overloaded = (record?.overloads?.length ?? 0) > 1;
   return Object.keys(questions).length
     ? { state, questions, used, overloaded, passage, names, has }
