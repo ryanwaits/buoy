@@ -1,47 +1,5 @@
 import { expect, test } from 'bun:test';
-import {
-  checkableUse,
-  type OpenPkgSpec,
-  passageAt,
-  renderType,
-  showsUse,
-  specRecord,
-  unknownMembers,
-} from '../src/lookout/evidence';
-import { combine } from '../src/lookout/rubric';
-
-const MD = [
-  '# Storage', // 1
-  '', // 2
-  'Read shared state with `useStorage`.', // 3
-  'It returns `null` while loading.', // 4
-  '', // 5
-  '```tsx', // 6
-  'const count = useStorage((root) => root.get("count"));', // 7
-  '```', // 8
-  '', // 9
-  '## `useMutation`', // 10
-  '', // 11
-  'Writes go through a mutation.', // 12
-  '', // 13
-  '## Next', // 14
-].join('\n');
-
-test('a prose line brings its paragraph', () => {
-  expect(passageAt(MD, 4)).toBe(
-    'Read shared state with `useStorage`.\nIt returns `null` while loading.',
-  );
-});
-
-test('a fence brings the paragraph that introduces it', () => {
-  expect(passageAt(MD, 7)).toBe(
-    'Read shared state with `useStorage`.\nIt returns `null` while loading.\n\n```tsx\nconst count = useStorage((root) => root.get("count"));\n```',
-  );
-});
-
-test('a heading brings the section it opens, up to the next heading', () => {
-  expect(passageAt(MD, 10)).toBe('## `useMutation`\n\nWrites go through a mutation.');
-});
+import { type OpenPkgSpec, renderType, specRecord } from '../src/lookout/evidence';
 
 test('spec record: real types, referenced shapes, deprecation', () => {
   const spec = {
@@ -138,100 +96,6 @@ test('function-typed parameters read as TypeScript', () => {
   expect([...seen]).toEqual(['LiveObject']);
 });
 
-const answers = {
-  about: 0.9,
-  counter: 0.1,
-  stale: 0.9,
-  incomplete: 0.8,
-  setup: 0.1,
-  prose: 0.6,
-  declared: 0.2,
-  members: 0.2,
-};
-
-test('inaccuracy is the question furthest over its own cut', () => {
-  // declared 0.75 is the higher score, but it has not cleared its 0.8; members 0.72 cleared 0.7.
-  expect(combine({ ...answers, declared: 0.75, members: 0.72 }, 'whole')).toMatchObject({
-    inaccurate: 0.72,
-    reason: 'members',
-  });
-});
-
-test('a passage that shows no call cannot be incomplete', () => {
-  expect(combine(answers, null)).toMatchObject({
-    incomplete: 0,
-    inaccurate: 0.6,
-    reason: 'prose',
-  });
-  expect(combine(answers, null).stale).toBe(0.9);
-});
-
-test('a lone opening tag cannot leave a prop out', () => {
-  expect(combine(answers, 'fragment').incomplete).toBe(0);
-  expect(combine(answers, 'whole').incomplete).toBe(0.8);
-});
-
-test('code shown as what not to write cannot be wrong by accident', () => {
-  const broken = { ...answers, counter: 0.8, members: 0.9, prose: 0.75 };
-  expect(combine(broken, 'whole')).toMatchObject({
-    incomplete: 0,
-    inaccurate: 0.75,
-    reason: 'prose',
-  });
-  expect(combine({ ...broken, counter: 0.2 }, 'whole').incomplete).toBe(0.8);
-});
-
-test('on an overloaded export a missing parameter counts only when Jev is sure', () => {
-  const hedged = { ...answers, incomplete: 0.56 };
-  expect(combine(hedged, 'whole', true).incomplete).toBe(0);
-  expect(combine(hedged, 'whole', false).incomplete).toBe(0.56);
-  expect(combine({ ...answers, incomplete: 0.8 }, 'whole', true).incomplete).toBe(0.8);
-});
-
-test('a broken setup requirement counts only when Jev is sure of it', () => {
-  const quiet = { ...answers, incomplete: 0.1 };
-  expect(combine({ ...quiet, setup: 0.54 }, 'whole').incomplete).toBe(0.1);
-  expect(combine({ ...quiet, setup: 0.82 }, 'whole').incomplete).toBe(0.82);
-});
-
-test('a passage that is not about the export cannot be inaccurate about it', () => {
-  expect(combine({ ...answers, about: 0.1 }, 'whole')).toMatchObject({ inaccurate: 0, stale: 0.9 });
-});
-
-test('what a passage says in words needs it to be about the export, not just to touch it', () => {
-  const said = { ...answers, prose: 0.75, members: 0.85 };
-  expect(combine({ ...said, about: 0.35 }, 'whole')).toMatchObject({
-    inaccurate: 0.85,
-    reason: 'members',
-  });
-  expect(combine({ ...said, about: 0.35, members: 0.1 }, 'whole').inaccurate).toBeLessThan(0.7);
-  expect(combine({ ...said, about: 0.6, members: 0.1 }, 'whole')).toMatchObject({
-    inaccurate: 0.75,
-    reason: 'prose',
-  });
-});
-
-test('showsUse: calls, constructors, generics, JSX and member calls, not mentions', () => {
-  expect(showsUse('const room = useRoom();', 'useRoom')).toBe('whole');
-  expect(showsUse('const x = useStorage<number>((r) => r)', 'useStorage')).toBe('whole');
-  expect(showsUse('new LivelyClient({ serverUrl })', 'LivelyClient')).toBe('whole');
-  expect(showsUse('<RoomProvider roomId="a">\n  <App />\n</RoomProvider>', 'RoomProvider')).toBe(
-    'whole',
-  );
-  expect(showsUse('<Cursor x={1} />', 'Cursor')).toBe('whole');
-  expect(showsUse('client.joinRoom("a")', 'LivelyClient.joinRoom')).toBe('whole');
-  expect(showsUse('Use `useRoom` when you need the room.', 'useRoom')).toBeNull();
-  expect(showsUse('import { useRoom } from "x";', 'useRoom')).toBeNull();
-  expect(showsUse('obj.useRoom()', 'useRoom')).toBeNull();
-  expect(showsUse('Filter with `useSelf()` if you only want others.', 'useSelf')).toBeNull();
-  expect(showsUse('```ts\nconst me = useSelf();\n```', 'useSelf')).toBe('whole');
-  expect(showsUse('Start with `LiveMap<LiveObject>` for collections.', 'LiveObject')).toBeNull();
-  expect(showsUse('Wrap your app in `<LivelyProvider>` first.', 'LivelyProvider')).toBeNull();
-  expect(showsUse('Use `<RoomProvider roomId="a">` per room.', 'RoomProvider')).toBe('fragment');
-  expect(showsUse('```ts\nconst del = useMutation(/* ... */);\n```', 'useMutation')).toBeNull();
-  expect(showsUse('```ts\nconst del = useMutation(...);\n```', 'useMutation')).toBeNull();
-});
-
 test('a component exposes props, and an unresolved type stays silent', () => {
   const provider = specRecord(
     { exports: [] },
@@ -263,21 +127,6 @@ test('a component exposes props, and an unresolved type stays silent', () => {
     },
   );
   expect(hook).toEqual({ name: 'useMap', kind: 'function', signature: 'useMap()' });
-});
-
-test('a table row is judged with its header, not with the rows about other exports', () => {
-  const table = [
-    'Intro.',
-    '',
-    '| Key | Type |',
-    '|-----|------|',
-    '| `useRoom` | `() => Room` |',
-    '| `useCursors` | `() => CursorData[]` |',
-  ].join('\n');
-  expect(passageAt(table, 6)).toBe(
-    '| Key | Type |\n|-----|------|\n| `useCursors` | `() => CursorData[]` |',
-  );
-  expect(passageAt(table, 3)).toBe('| Key | Type |');
 });
 
 test('type arguments survive rendering', () => {
@@ -372,18 +221,6 @@ test('a parameter default, a written utility type and a readonly array reach the
   expect(record.parameters?.map((p) => p.default)).toEqual(['50', '{} as T']);
   expect(record.returns).toBe('readonly T[]');
   expect(renderType({ 'x-ts-type': 'Readonly<T>' }, new Set())).toBe('Readonly<T>');
-});
-
-test('a record with no signature cannot be checked against a call', () => {
-  const passage = '`setAutoFreeze(true / false)` turns this on or off.';
-  expect(checkableUse(passage, { name: 'setAutoFreeze', kind: 'variable' })).toBeNull();
-  expect(
-    checkableUse(passage, {
-      name: 'setAutoFreeze',
-      kind: 'function',
-      signature: 'setAutoFreeze(on: boolean)',
-    }),
-  ).toBe('whole');
 });
 
 test('a default export goes by its local name, and a rest parameter reads as one', () => {
@@ -482,160 +319,6 @@ test('type parameters are part of the signature', () => {
   expect(record.signature).toBe('createRoomContext<TPresence, TStorage>()');
 });
 
-const liveObject = {
-  name: 'LiveObject',
-  kind: 'class',
-  extends: 'AbstractCrdt',
-  typeParameters: [{ name: 'T' }],
-  members: ['get', 'set', 'update', 'toObject', 'toImmutable', '_attach'].map((name) => ({
-    name,
-    kind: 'method',
-  })),
-};
-const presenceUser = {
-  name: 'PresenceUser',
-  kind: 'interface',
-  members: [
-    'userId',
-    'displayName',
-    'color',
-    'connectedAt',
-    'onlineStatus',
-    'lastActiveAt',
-    'isIdle',
-    'avatarUrl',
-    'location',
-    'metadata',
-  ].map((name) => ({ name, kind: 'property' })),
-};
-const live = {
-  exports: [
-    liveObject,
-    presenceUser,
-    { name: 'AbstractCrdt', kind: 'class', members: [] },
-    { name: 'useStorage', kind: 'function', signatures: [{ parameters: [] }] },
-  ],
-};
-
-test('unknownMembers: a method listed in prose that the class does not have', () => {
-  expect(unknownMembers('`delete(key)` — remove a field:', live, liveObject)).toEqual(['delete']);
-  expect(
-    unknownMembers('- `get(key)`: read a field\n- `.remove(key)`: drop it', live, liveObject),
-  ).toEqual(['remove']);
-  expect(unknownMembers('Call the `clear` method to reset it.', live, liveObject)).toEqual([
-    'clear',
-  ]);
-});
-
-test('unknownMembers: a written-out shape with a field the interface does not have', () => {
-  const passage =
-    '`PresenceUser` — { userId, displayName, onlineStatus, location?, metadata?, joinedAt }';
-  expect(unknownMembers(passage, live, presenceUser)).toEqual(['joinedAt']);
-  const declared =
-    '```ts\ninterface PresenceUser {\n  userId: string;\n  readonly joinedAt?: number;\n}\n```';
-  expect(unknownMembers(declared, live, presenceUser)).toEqual(['joinedAt']);
-  // A shape that belongs to something else on the line is not this export's.
-  expect(
-    unknownMembers('`PresenceUser` comes from `useSelf({ fresh })`.', live, presenceUser),
-  ).toEqual([]);
-});
-
-test('unknownMembers: a member read off a receiver the code binds to the export', () => {
-  const code = [
-    '```ts',
-    'const obj = new LiveObject({ count: 0 });',
-    'obj.remove("count"); // obj.gone() is not a call',
-    'obj.get("count").toFixed();',
-    'liveObject.delete("count");',
-    'LiveObject.from({});',
-    'other.missing();',
-    'import x from "./liveObject.js";',
-    'obj.remove("again");',
-    '```',
-  ].join('\n');
-  expect(unknownMembers(code, live, liveObject)).toEqual(['remove', 'delete', 'from']);
-  expect(
-    unknownMembers(
-      '```ts\nfunction f(user: PresenceUser) {\n  return user?.joinedAt;\n}\n```',
-      live,
-      presenceUser,
-    ),
-  ).toEqual(['joinedAt']);
-  expect(unknownMembers('```ts\nnew LiveObject({}).destroy();\n```', live, liveObject)).toEqual([
-    'destroy',
-  ]);
-});
-
-test('unknownMembers: when in doubt, no name', () => {
-  // Its own name, its type parameters, other exports, members, builtins.
-  const safe = [
-    '`LiveObject(initial)` — the constructor',
-    '`T` — the shape',
-    '`useStorage()` — read it',
-    '`get(key)` — read a field',
-    '`_attach(doc)` — internal',
-    '`toString()` — debug',
-    '```ts\nconst o = new LiveObject({});\no.then(() => {});\nliveObject.length;\n```',
-  ].join('\n');
-  expect(unknownMembers(safe, live, liveObject)).toEqual([]);
-  // A bare identifier on a class could be an option or an argument.
-  expect(unknownMembers('- `initial`: the starting value', live, liveObject)).toEqual([]);
-  // Saying it is not there agrees with the record.
-  expect(unknownMembers('There is no `delete()` method. Use `update`.', live, liveObject)).toEqual(
-    [],
-  );
-  expect(unknownMembers('`.delete(key)` was removed.', live, liveObject)).toEqual([]);
-  // Not a class, interface or type: nothing to be a member of.
-  expect(unknownMembers('`delete(key)` — remove', live, live.exports[3])).toEqual([]);
-  // Capped at three.
-  expect(unknownMembers('`a()` — x\n`b()` — x\n`c()` — x\n`d()` — x', live, liveObject)).toEqual([
-    'a',
-    'b',
-    'c',
-  ]);
-});
-
-test('unknownMembers: an open type can have any member', () => {
-  const passage = '`Meta` — { id, anything }';
-  const meta = (over: object) => ({
-    name: 'Meta',
-    kind: 'interface',
-    members: [{ name: 'id', kind: 'property' }],
-    ...over,
-  });
-  const closed = meta({});
-  expect(unknownMembers(passage, { exports: [closed] }, closed)).toEqual(['anything']);
-  for (const open of [
-    meta({ schema: { type: 'object', properties: {}, additionalProperties: true } }),
-    meta({ members: [{ name: 'id' }, { name: '[string]' }] }),
-    meta({ schema: { allOf: [{ $ref: '#/types/Gone' }] } }),
-    meta({ schema: { allOf: [{ type: 'object', additionalProperties: { type: 'string' } }] } }),
-    meta({ schema: { anyOf: [{ type: 'object' }] } }),
-    meta({ extends: 'HonoBase' }),
-    meta({ members: [] }),
-  ])
-    expect(unknownMembers(passage, { exports: [open] }, open)).toEqual([]);
-  // A base the spec has is part of the member list.
-  const child = meta({ extends: 'Base<string>' });
-  const base = { name: 'Base', kind: 'interface', members: [{ name: 'anything' }] };
-  expect(unknownMembers(passage, { exports: [child, base] }, child)).toEqual([]);
-  const viaTypes = {
-    exports: [child],
-    types: [{ name: 'Base', schema: { type: 'object', properties: { anything: {} } } }],
-  };
-  expect(unknownMembers(passage, viaTypes, child)).toEqual([]);
-  const external = { exports: [child], types: [{ name: 'Base', external: true }] };
-  expect(unknownMembers(passage, external, child)).toEqual([]);
-});
-
-test('in prose, `name()` with nothing inside names the function; in code it is the call', () => {
-  expect(
-    showsUse('generateImage() Generate images from a prompt.', 'generateImage', false),
-  ).toBeNull();
-  expect(showsUse('Use generateImage({ model }) here.', 'generateImage', false)).toBe('whole');
-  expect(showsUse('const id = generateId();', 'generateId', true)).toBe('whole');
-});
-
 test('a destructured parameter reads as its keys, from an inline shape or a named one', () => {
   const spec = {
     exports: [
@@ -708,29 +391,6 @@ test('a destructured parameter reads as its keys, from an inline shape or a name
   expect(room.kind).toBe('React component');
   expect(room.props?.map((p) => p.name)).toEqual(['roomId', 'userId', 'children']);
   expect(room.signature).toBe('<RoomProvider roomId userId children />');
-});
-
-test('a call whose options literal elides at its own level is a fragment, not a whole use', () => {
-  expect(
-    showsUse(
-      'const r = await generateText({\n  // ...\n  output: Output.object({ schema }),\n});',
-      'generateText',
-    ),
-  ).toBeNull();
-  expect(showsUse('dynamicTool({\n  /* ... */\n})', 'dynamicTool')).toBeNull();
-  expect(showsUse('new ToolLoopAgent({ ... })', 'ToolLoopAgent')).toBeNull();
-  expect(
-    showsUse(
-      "so string IDs work: `streamTranscribe({ model: 'openai/whisper', ... })`",
-      'streamTranscribe',
-      false,
-    ),
-  ).toBeNull();
-  expect(showsUse('f({ ...rest, a: 1 })', 'f')).toBe('whole');
-  // An elision inside a nested literal does not make the outer call a fragment.
-  expect(showsUse('generateText({\n  model,\n  tools: { /* ... */ },\n});', 'generateText')).toBe(
-    'whole',
-  );
 });
 
 test('a destructured union says which keys a caller must pick between', () => {

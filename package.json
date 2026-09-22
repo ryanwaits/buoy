@@ -1,7 +1,7 @@
 {
   "name": "@driftdev/buoy",
   "version": "0.6.0",
-  "description": "Docs review overlay. Drift finds it, Buoy marks it: spec-checked findings pinned on your rendered docs page.",
+  "description": "Docs review overlay. OpenPkg is the record, Buoy pins where the page disagrees.",
   "keywords": [
     "docs",
     "documentation",
@@ -57,7 +57,6 @@
     "release": "bun run build && changeset publish"
   },
   "dependencies": {
-    "@driftdev/sdk": "^1.19.2",
     "@openpkg-ts/sdk": "^0.55.2",
     "@openpkg-ts/spec": "^0.55.0",
     "node-html-parser": "^9.0.4"

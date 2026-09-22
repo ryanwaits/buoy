@@ -1,4 +1,4 @@
-import type { Claim, PageDocument } from '@driftdev/sdk';
+import type { Claim, ClaimKind, Locator, PageDocument, RuleHit, SpecRef, SpecSlice } from './claim';
 import type { Excerpt } from './excerpts';
 import type { SpecRecord } from './lookout/evidence';
 import type { Reason } from './lookout/thresholds';
@@ -6,13 +6,14 @@ import type { Reason } from './lookout/thresholds';
 export type {
   Claim,
   ClaimKind,
+  Excerpt,
   Locator,
   PageDocument,
   RuleHit,
+  SpecRecord,
   SpecRef,
   SpecSlice,
-} from '@driftdev/sdk';
-export type { Excerpt, SpecRecord };
+};
 
 /**
  * Jev's reading of a claim. Probabilities, never verdicts. There is no separate

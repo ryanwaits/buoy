@@ -1,5 +1,5 @@
 /**
- * A package entry: a path, or a path with what Drift needs to know about it.
+ * A package entry: a path, or a path plus which import specifier it covers.
  * `importSpecifier` when the entry is a `package.json` `exports` subpath
  * (`jotai/utils`), so imports from the package root are not its business.
  * `also` for pages that document more than one entry (zod and `zod/mini`

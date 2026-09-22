@@ -16,6 +16,6 @@ export default defineConfig([
     clean: false,
     format: ['esm'],
     target: 'node',
-    external: ['@driftdev/sdk', '@openpkg-ts/sdk', '@openpkg-ts/spec', 'node-html-parser', '@typesafe-ai/sdk'],
+    external: ['@openpkg-ts/sdk', '@openpkg-ts/spec', 'node-html-parser', '@typesafe-ai/sdk'],
   },
 ]);

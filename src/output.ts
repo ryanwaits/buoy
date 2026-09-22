@@ -95,10 +95,10 @@ export function sentence(claim: JudgedClaim, context?: string, kind?: string): s
 
 /** The one command that settles a finding. */
 export function checkCommand(claim: JudgedClaim, page: JudgedPage | undefined): string {
-  const entry = page?.source?.entry ? `${page.source.entry} ` : '';
-  return claim.specRef
-    ? `npx @driftdev/cli get ${entry}${claim.specRef.export}`
-    : `npx @driftdev/cli list ${entry}`.trim();
+  const declared = claim.specRef ? page?.declared?.[claim.specRef.export] : undefined;
+  if (declared) return declared;
+  const entry = page?.source?.entry ?? '';
+  return claim.specRef ? `${entry} ${claim.specRef.export}`.trim() : entry;
 }
 
 /** The spec a claim should be read against: its replacement when deprecated. */
@@ -118,7 +118,7 @@ const GROUND_RULES = `## Ground rules
 
 - The reviewer's decisions come first. Do what they say. A decision that says the source code is wrong is not a docs edit: stop, report it, and move on.
 - The API spec is the source of truth. Edit docs only. Never change source code or the public API to make a finding go away.
-- Verify before you edit. For each finding, read the real export with the command on its "Verify" line. One lookup per claim; never from memory, never by grepping source. If the \`drift\` skill or the \`drift mcp\` server is available in your harness, use it instead of the raw CLI.
+- Verify before you edit. For each finding, read the declaration on its "Verify" line. One lookup per claim; never from memory.
 - **Rule** findings are deterministic detector hits. Treat them as true unless the lookup contradicts them. If it does, do not edit: report it as a false positive.
 - **Jev** findings are probabilities (stale, incomplete, inaccurate), not verdicts. Check each against the spec first. Skip the ones that are fine and say why.
 - "Never documented" means the spec has it and the page never documents it. Decide whether this page should document it. If not, say so instead of padding the page.

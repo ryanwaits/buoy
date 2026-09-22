@@ -1,15 +1,16 @@
 # Buoy
 
-Drift finds it. Buoy marks it.
+OpenPkg is the record. Buoy marks the page.
 
-Buoy is a dev overlay for docs sites. It checks what your docs say against what your package exports, and pins each disagreement on the rendered page, on the line that makes the claim. It scores and points. It never rewrites your docs.
+Buoy is a dev overlay for docs sites. It checks what a section says against the exports that section names, and pins each disagreement on the rendered page. It never rewrites your docs.
 
 ```
-docs page ─┐
-           ├─ Drift (rules) ─┐
-TypeScript ─ OpenPkg (spec) ─┤            ┌─ a buoy on the word that is wrong
-                             ├─ Buoy ─────┼─ its popup: proved by code, or likely with the odds
-             Jev (judgment) ─┘            └─ +N: members this section never documents
+a heading section
+  → the names it imports, calls, and writes in a shape
+TypeScript → OpenPkg, once → the thin record for those names
+  → code: a name the record lacks, a required argument the call skips
+  → Jev: does the prose contradict the description
+  → a buoy on the word, same card as before
 ```
 
 ## What it finds
@@ -21,7 +22,7 @@ Things a reader would copy and get wrong. From one real docs site:
 - `useMutation(callback)` without its required `deps`, on three pages. *(rule)*
 - A table that says `useCursors` returns `CursorData[]`. It returns a `Map`. *(Jev: inaccurate, 0.94)*
 - "`LiveObject.delete(key)`". There is no such method. *(Jev: inaccurate, 0.95)*
-- A section for `StorageDocument` that never documents four of its public methods. *(gap)*
+- `PresenceUser — { …, joinedAt }`. The field is `connectedAt`. *(proof: not a member)*
 
 ## Install
 
@@ -102,43 +103,21 @@ mount({ data: await (await fetch('/buoy.json')).json() });
 
 Rendered mode fetches the page, reads the article as markdown, and wants semantic HTML: real headings, `<pre>` for code. A highlighter that builds its blocks from `<div>`s is read too, when the block's class says code (`font-mono`, `code-block`, `hljs`, `shiki`, `prism`, `highlight`) and its text is plainly JS or TS; the overlay lands findings in the same block. Both modes can cover the same route: list it under `routes` and `pages`.
 
-### Telling Buoy what a page documents
-
-Optional. A page is on the hook for a type when a heading names it. For the rest, put a `drift.docs.json` next to `buoy.config.json`:
-
-```json
-{
-  "pages": [
-    { "page": "/docs/client", "type": "ActivityTracker", "internal": ["_status", "_pollTimer"] }
-  ]
-}
-```
-
-`page` is the route (or the markdown path), `type` the export it documents, `internal` members that are public in the types but not meant for docs, so they are never reported as "never documented". `deprecated` and `replacements` (`{ "old": "new" }`) do the same for members the source does not annotate. It is Drift's docs map; Buoy passes it through.
-
 ## Reading the overlay
 
-- **A buoy is a buoy.** One solid circle per place, in your page's own heading colour. It sits on the word that is wrong when the page shows it (`serverUrl`, `delete(key)`), else on the passage. Its number is how many findings share that place; `+N` means members of a type that its section never documents: a getter, method or property the spec has and the page does not teach. The card says which kind, and when the same name appears on the page as an option key (`port: 1999` for a `port` getter) it says so. A dashed line marks where those members would go. The whole block is the target, not just the buoy: point at a flagged code block or passage and it is ringed, click anywhere in it for the popup. Rest on the washed word itself and the popup opens on its own, and closes when you move away.
-- **The popup says which kind.** *Proved · code checked it*: an exact rule fired on a code sample or table: an import that does not exist, a prop or option the type does not define, too many arguments, a missing required argument or prop, a literal of the wrong primitive type, a parameter table that names a parameter the function does not have, a deprecated API taught without saying so. *Likely · a model's read · 78%*: a probability that the passage is stale, incomplete or inaccurate against the spec, from atomic yes/no questions asked of [TypeSafe](https://docs.typesafe.ai/)'s Jev model, shown only when the score clears a cut set by calibration. Set `TYPESAFE_API_KEY` and install `@typesafe-ai/sdk` to turn it on; without them the build is rules only. A page of docs costs a fraction of a cent, and answers are cached in `.buoy/jev.json`.
+- **A buoy is a buoy.** One solid circle per place, in your page's own heading colour. It sits on the word that is wrong when the page shows it (`serverUrl`, `joinedAt`), else on the passage. Its number is how many findings share that place. The whole block is the target, not just the buoy: point at a flagged code block or passage and it is ringed, click anywhere in it for the popup. Rest on the washed word itself and the popup opens on its own, and closes when you move away.
+- **The popup says which kind.** *Proved · code checked it*: an import that is not exported, an option or member the record does not have, a required argument or a required one-of that a call skips, a deprecated export taught as current. *Likely · a model's read*: one question to [TypeSafe](https://docs.typesafe.ai/)'s Jev, whether the prose contradicts the description, shown from confidence 0.8. Set `TYPESAFE_API_KEY` and install `@typesafe-ai/sdk` to turn that question on; without them the build is the proofs only. Answers are cached in `.buoy/jev.json`.
 - **Then why, and where to check.** One sentence naming the thing (`delete` is not a method of LiveObject) and the one fact that settles it: the members the type does have, the parameters the rule names (`userId: string, displayName: string · 9 more`), the spec's own `@deprecated` note. **Details** unfolds the rest: `docs` (what the page says), `spec` (the full signature), `source` (`file:line` of the declaration), `check` (the one command that settles it), and a note for the writer. Sentences are templates filled by code, never model text. The same issue in several places is one decision: "2 of 5" walks them, and *Not a problem* dismisses them together.
-- A rule hit is certain and Jev is never asked about it. Jev reads only what a rule cannot: whether a passage is stale, what its prose says, the types it writes out, the members it names, and whether the code breaks a stated requirement.
+- A proof is code, and Jev is not asked about it. Jev reads one thing: whether the section's prose contradicts the description. An optional field the section never mentions is not a finding. A fence title or heading that marks the sample as an older version (`AI SDK 4.0`, `Before`) drops that section.
 - **Toolbar.** `N` next finding (proved first, then by odds), `F` filter by evidence or kind, `P` pages with their counts, `C` copy a brief for a coding agent (what is wrong, where, how to verify; Buoy does not write the fix), `Z` what you dismissed, with a restore for each and for all, `Esc` close. Notes, dismissals and the filter stay in your browser.
 - Light or dark follows the page. To pin the colours: `--buoy-ink`, `--buoy-paper`, `--buoy-mark` on `:root`.
 - The overlay never touches your DOM. Pins are drawn in a Shadow DOM layer from text ranges, so framework re-renders are safe.
 
 ## How accurate
 
-Measured, not claimed. Real docs passages that raise no rule are judged against their true spec record (should be silent) and against a record broken in a known way (should fire): about 2,200 clean passages and 2,800 broken ones per run, from the docs of nine open-source TypeScript projects.
+A name, an import, a required argument, and a deprecation are checked in code against the thin OpenPkg record. A wrong key or a missing required argument does not depend on a model. Jev is asked only whether the prose contradicts the description, and a behaviour buoy shows when that answer is `contradicts` at confidence 0.8 or above.
 
-| | Caught (95% interval) | Clean passages flagged |
-|---|---|---|
-| stale | 84% (82–85) | 0 of 2,242 |
-| inaccurate | 83% (71–91) of what Jev is asked: what the prose says, the types it writes out, the members it names. Arity, option keys, literal types, parameter tables and imports are exact rules, not Jev's | every one read by hand |
-| incomplete | 91% (88–93) | 〃 · asked only where no rule can answer: prose uses, never a code sample with a checkable signature |
-
-Precision comes first: cuts are the lowest that kept clean passages under the line, except where a flagged "clean" passage turned out to be a real disagreement between a project's docs and its own source. Those are most of what is left over the line. What Jev cannot see (a renamed row in a parameter table, arity, an undefined option key) is decided by rules instead, which are exact.
-
-Every rule hit on those projects' docs is read by hand after each upstream release. A false hit is a bug in Drift or OpenPkg and gets fixed there, not filtered here.
+The earlier rubric (stale, incomplete, inaccurate, about 2,200 clean passages) belonged to the Drift judge. It is not this build. A false proof is a bug in the section scan or in OpenPkg, and it is not filtered in the overlay.
 
 ## What it will not do
 
@@ -159,4 +138,4 @@ bun test
 bun run build
 ```
 
-Built on [Drift](https://github.com/ryanwaits/drift) (`buildPageDocument`) and [OpenPkg](https://github.com/ryanwaits/openpkg-ts). Project rules for contributors and agents are in `AGENTS.md`.
+Built on [OpenPkg](https://github.com/ryanwaits/openpkg-ts). Project rules for contributors and agents are in `AGENTS.md`.

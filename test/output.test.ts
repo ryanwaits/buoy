@@ -45,7 +45,7 @@ test('rule finding: issue, hint, how to verify, decision, source line', () => {
     '1. **Rule `prose-broken-reference`** · fence · line 12 · under "Providers"',
   );
   expect(out).toContain("Detector hint: Did you mean 'useUpdateCursor'?");
-  expect(out).toContain('Verify: `npx @driftdev/cli list packages/react/src/index.ts`');
+  expect(out).toContain('Verify: `packages/react/src/index.ts`');
   expect(out).toContain('Decision: renamed in 0.2');
   expect(out).toContain('## Decisions');
   expect(out).toContain('→ renamed in 0.2');
@@ -63,7 +63,7 @@ test('Jev finding on a rendered page: probability wording, replacement spec, no 
   expect(out).toContain('**Jev, 86% likely stale** · prose · under "Providers"');
   expect(out).not.toContain('line 12');
   expect(out).toContain('Spec: `execute(snippet: string)`');
-  expect(out).toContain('Verify: `npx @driftdev/cli get packages/react/src/index.ts Simnet`');
+  expect(out).toContain('Verify: `packages/react/src/index.ts Simnet`');
   expect(out).toContain('searching the repo for the quoted text');
 });
 
