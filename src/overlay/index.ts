@@ -394,7 +394,7 @@ function popoverHTML({
       : '';
   // Buoy's own record spells a destructured parameter as its keys; Drift's slice says `options: object`.
   const ownSignature =
-    first.specRef && !first.specRef.member
+    first.specRef && !first.specRef.member && !first.specRef.replacement
       ? page?.records?.[first.specRef.export]?.signature
       : undefined;
   const signature =
