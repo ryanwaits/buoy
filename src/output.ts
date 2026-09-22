@@ -1,4 +1,5 @@
 import { maxScore, topDimension } from './policy';
+import type { Decision } from './store';
 import type { JudgedClaim, JudgedPage, SpecSlice } from './types';
 
 /** The name a finding is about, as the reader would write it. */
@@ -74,6 +75,7 @@ export function signatureOf(slice: SpecSlice | null): string | null {
 
 const GROUND_RULES = `## Ground rules
 
+- The reviewer's decisions come first. Do what they say. A decision that says the source code is wrong is not a docs edit: stop, report it, and move on.
 - The API spec is the source of truth. Edit docs only. Never change source code or the public API to make a finding go away.
 - Verify before you edit. For each finding, read the real export with the command on its "Verify" line. One lookup per claim; never from memory, never by grepping source. If the \`drift\` skill or the \`drift mcp\` server is available in your harness, use it instead of the raw CLI.
 - **Rule** findings are deterministic detector hits. Treat them as true unless the lookup contradicts them. If it does, do not edit: report it as a false positive.
@@ -82,7 +84,7 @@ const GROUND_RULES = `## Ground rules
 - Smallest edit that makes the claim true. Keep the author's voice and structure. Leave sections with no finding alone.
 - If the docs look right and the spec looks wrong, stop and tell me. Do not "fix" either one.`;
 
-function findingBlock(claim: JudgedClaim, page: JudgedPage, n: number, note?: string): string {
+function findingBlock(claim: JudgedClaim, page: JudgedPage, n: number, decision?: string): string {
   const rendered = page.source?.mode === 'rendered';
   const label = claim.rule
     ? `Rule \`${claim.rule.type}\``
@@ -107,37 +109,58 @@ function findingBlock(claim: JudgedClaim, page: JudgedPage, n: number, note?: st
       ? `   Verify: \`${check}\``
       : `   Verify: \`${check}\` to see what the package really exports`,
   );
-  if (note) lines.push(`   Reviewer note: ${note}`);
+  if (decision !== undefined) lines.push(`   Decision: ${decision || 'Real. Fix it.'}`);
   return lines.join('\n');
+}
+
+/** What a decision says about a finding, in one line. */
+function decisionLine(claim: JudgedClaim, decision: string): string {
+  return `${sentence(claim)}\n   → ${decision || 'Real. Fix it.'}`;
 }
 
 /**
  * The copy button's payload: a brief a coding agent can act on in any harness.
- * It hands over findings, the spec, and how to verify. It never contains a rewrite;
- * the agent does the editing, checked against Drift.
+ * The reader's decisions lead; the findings follow as context, with the spec and how to
+ * verify each. It never contains a rewrite; the agent does the editing, checked against Drift.
+ * A finding resolved as not a problem (`null`) is left out.
  */
 export function toPrompt(
   pages: JudgedPage[],
   findings: Set<JudgedClaim>,
-  notes: Record<string, string>,
+  resolved: Record<string, Decision>,
   route: string,
 ): string {
+  const kept = (claim: JudgedClaim): boolean => findings.has(claim) && resolved[claim.id] !== null;
+  const decided = pages.flatMap((page) =>
+    page.claims.filter((c) => kept(c) && typeof resolved[c.id] === 'string'),
+  );
   const sections = pages.flatMap((page) => {
-    const claims = page.claims.filter((claim) => findings.has(claim));
+    const claims = page.claims.filter(kept);
     if (!claims.length) return [];
     const heading =
       page.source?.mode === 'rendered'
         ? `### Rendered page \`${page.path}\`\n\nChecked as rendered, so there is no source path. Find the file by searching the repo for the quoted text.`
         : `### \`${page.path}\``;
-    const items = claims.map((claim, i) => findingBlock(claim, page, i + 1, notes[claim.id]));
+    const items = claims.map((claim, i) =>
+      findingBlock(claim, page, i + 1, resolved[claim.id] ?? undefined),
+    );
     return [`${heading}\n\n${items.join('\n\n')}`];
   });
-  const total = sections.length ? [...findings].length : 0;
+  const total = pages.flatMap((p) => p.claims).filter(kept).length;
+  const decisions = decided.length
+    ? `## Decisions
+
+The reviewer resolved ${decided.length} of these on the page. In their words:
+
+${decided.map((c, i) => `${i + 1}. ${decisionLine(c, resolved[c.id] as string)}`).join('\n')}
+
+`
+    : '';
   return `# Fix docs drift on ${route}
 
 These docs have drifted from the API they document. Buoy, a docs review overlay, pinned ${total} finding${total === 1 ? '' : 's'} on the rendered page and a person reviewed them there. Work through them below.
 
-${GROUND_RULES}
+${decisions}${GROUND_RULES}
 
 ## Findings
 

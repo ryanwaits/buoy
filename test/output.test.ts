@@ -25,7 +25,7 @@ const page = (claims: JudgedClaim[], mode: 'markdown' | 'rendered'): JudgedPage 
   source: { mode, entry: 'packages/react/src/index.ts' },
 });
 
-test('rule finding: issue, hint, how to verify, reviewer note, source line', () => {
+test('rule finding: issue, hint, how to verify, decision, source line', () => {
   const c = claim({
     rule: {
       type: 'prose-broken-reference',
@@ -46,7 +46,9 @@ test('rule finding: issue, hint, how to verify, reviewer note, source line', () 
   );
   expect(out).toContain("Detector hint: Did you mean 'useUpdateCursor'?");
   expect(out).toContain('Verify: `npx @driftdev/cli list packages/react/src/index.ts`');
-  expect(out).toContain('Reviewer note: renamed in 0.2');
+  expect(out).toContain('Decision: renamed in 0.2');
+  expect(out).toContain('## Decisions');
+  expect(out).toContain('→ renamed in 0.2');
   expect(out).toContain('Edit docs only');
 });
 
@@ -72,6 +74,29 @@ test('only the findings handed in are listed', () => {
   expect(out).toContain('kept');
   expect(out).not.toContain('Issue: dismissed');
   expect(out).toContain('pinned 1 finding on');
+  expect(out).not.toContain('## Decisions');
+});
+
+test('decisions lead; not-a-problem is left out; a bare resolve reads as "fix it"', () => {
+  const real = claim({ id: 'a', rule: { type: 'key-gap', issue: 'real one' } });
+  const bare = claim({ id: 'b', rule: { type: 'key-gap', issue: 'bare one' } });
+  const nope = claim({ id: 'c', rule: { type: 'key-gap', issue: 'not one' } });
+  const fresh = claim({ id: 'd', rule: { type: 'key-gap', issue: 'fresh one' } });
+  const all = [real, bare, nope, fresh];
+  const out = toPrompt(
+    [page(all, 'markdown')],
+    new Set(all),
+    { a: 'prose in this section needs a rewrite', b: '', c: null },
+    '/docs',
+  );
+  expect(out.indexOf('## Decisions')).toBeLessThan(out.indexOf('## Ground rules'));
+  expect(out).toContain('resolved 2 of these');
+  expect(out).toContain('→ prose in this section needs a rewrite');
+  expect(out).toContain('→ Real. Fix it.');
+  expect(out).toContain('Decision: Real. Fix it.');
+  expect(out).not.toContain('not one');
+  expect(out).toContain('Issue: fresh one');
+  expect(out).toContain('pinned 3 findings on');
 });
 
 const members = claim({

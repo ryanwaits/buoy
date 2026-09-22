@@ -19,7 +19,7 @@ import {
   maxScore,
 } from '../policy';
 import { findRoot } from '../roots';
-import { loadStore } from '../store';
+import { type Decision, loadStore } from '../store';
 import type { Anchor, JudgedClaim, JudgedPage, Manifest, SpecSlice } from '../types';
 import { inHeading, type Layout, layout, PIN } from './geometry';
 import { type Mark, toMarks } from './marks';
@@ -63,6 +63,8 @@ const ICON = {
     '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4.5l3 3 3-3"/></svg>',
   check:
     '<svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg>',
+  /** A resolved buoy's face. */
+  tick: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5"/></svg>',
 };
 
 /** A sentence from `output.sentence`: escaped, its backticked identifiers as code, the wrong word washed. */
@@ -190,12 +192,15 @@ type PopoverInput = {
   mark: Mark;
   page: JudgedPage | undefined;
   slices: SpecSlice[];
-  note: string;
+  /** The reader's decision on this mark, when every finding here has one. */
+  decision: Decision | undefined;
+  /** The note field is open: the reader is saying what should happen. */
+  resolving: boolean;
   /** Position among the places that show the same issue. */
   same: { at: number; of: number };
 };
 
-function popoverHTML({ mark, page, slices, note, same }: PopoverInput): string {
+function popoverHTML({ mark, page, slices, decision, resolving, same }: PopoverInput): string {
   const { claims } = mark;
   const first = claims[0];
   const context = mark.anchor.range.startContainer.parentElement?.closest(BLOCK)?.textContent ?? '';
@@ -242,15 +247,25 @@ function popoverHTML({ mark, page, slices, note, same }: PopoverInput): string {
         : '';
   // The trimmed spec line gives way to the full one when unfolded.
   const trimmed = proof && signature && proof.label === 'spec' && !proof.whole && !ref?.deprecated;
-  // A card with a note opens unfolded: what the reader wrote is never hidden from them.
-  const unfolded = note.trim() !== '';
+  const resolved = decision !== undefined;
+  // What the reader decided stays in view, and can be taken back.
+  const said = resolved
+    ? `<div class="said"><b>${decision === null ? 'Not a problem' : 'Resolved'}</b>${decision ? `<span>${esc(decision)}</span>` : ''}<button type="button" data-act="undo">Undo</button></div>`
+    : resolving
+      ? `<textarea class="note" rows="2" data-note aria-label="What should happen" placeholder="What should happen?"></textarea>`
+      : '';
+  const foot = resolved
+    ? `<button type="button" class="pill go" data-act="next">Next</button>`
+    : resolving
+      ? `<button type="button" class="pill" data-act="resolve-cancel">Cancel</button><button type="button" class="pill go" data-act="resolve-done">Done</button>`
+      : `<button type="button" class="pill" data-act="dismiss-mark">Not a problem</button><button type="button" class="pill go" data-act="resolve">Resolve</button>`;
   return `${evidenceHTML(claims, aside)}${lead}${list}
     ${proof ? `<dl class="facts mono${trimmed ? ' trimmed' : ''}"><dt>${proof.label}</dt><dd>${proof.html}</dd></dl>` : ''}
-    <div class="fold${unfolded ? ' open' : ''}"><div>
+    <div class="fold"><div>
       <dl class="facts mono">${rows}</dl>
-      <textarea class="note" rows="1" data-note="${esc(first.id)}" aria-label="Note for the writer" placeholder="Add a note for the writer">${esc(note)}</textarea>
     </div></div>
-    <div class="pop-f"><button type="button" class="more" data-act="more" aria-expanded="${unfolded}">Details${ICON.chevron}</button><button type="button" class="pill" data-act="dismiss-mark">Not a problem</button><button type="button" class="pill go" data-act="copy-mark">Copy for agent</button></div>`;
+    ${said}
+    <div class="pop-f"><button type="button" class="more" data-act="more" aria-expanded="false">Details${ICON.chevron}</button>${foot}</div>`;
 }
 
 /**
@@ -350,7 +365,7 @@ export function mount(options: MountOptions): () => void {
 
   let review = true;
   let selected: string | null = null;
-  type Panel = 'filter' | 'pages' | 'dismissed';
+  type Panel = 'filter' | 'pages' | 'resolved';
   let panel: Panel | null = null;
   let anchors: Anchor[] = [];
   let marks: Mark[] = [];
@@ -358,6 +373,8 @@ export function mount(options: MountOptions): () => void {
   let layouts: Layout[] = [];
   let pages: JudgedPage[] = [];
   let checked = true;
+  /** The open card's note field is showing. */
+  let resolving = false;
 
   // Stable ids for the nodes marks hang on, so a mark keeps its identity across syncs.
   const blockIds = new WeakMap<Node, number>();
@@ -367,12 +384,16 @@ export function mount(options: MountOptions): () => void {
     return blockIds.get(block) ?? 0;
   };
 
-  /** Findings the reader has not dismissed; the filter has not been applied. */
+  const isResolved = (c: JudgedClaim): boolean => c.id in store.resolved;
+  /** Findings the reader has not resolved; the filter has not been applied. */
   const open = (from: JudgedPage[]): JudgedClaim[] =>
-    from.flatMap((p) => p.claims).filter((c) => isFinding(c) && !store.dismissed.has(c.id));
-  /** What gets a buoy. */
+    from.flatMap((p) => p.claims).filter((c) => isFinding(c) && !isResolved(c));
+  /** What still asks for a decision. */
   const shown = (from: JudgedPage[]): JudgedClaim[] =>
     open(from).filter((c) => !isHidden(c, store.hidden));
+  /** What gets a buoy: resolved findings keep theirs, turned inside out. */
+  const placed = (from: JudgedPage[]): JudgedClaim[] =>
+    from.flatMap((p) => p.claims).filter((c) => isFinding(c) && !isHidden(c, store.hidden));
   const pageOf = (claim: JudgedClaim): JudgedPage | undefined =>
     pages.find((p) => p.claims.includes(claim));
 
@@ -429,7 +450,7 @@ export function mount(options: MountOptions): () => void {
     const current = currentPages();
     checked = current !== null;
     pages = current ?? [];
-    const result = anchorClaims(root, shown(pages));
+    const result = anchorClaims(root, placed(pages));
     // Reading order, which is what the eye follows down the page.
     anchors = result.placed.sort((a, b) =>
       a.range.compareBoundaryPoints(Range.START_TO_START, b.range),
@@ -443,15 +464,18 @@ export function mount(options: MountOptions): () => void {
       const at = layouts[i];
       const id = esc(mark.id);
       const gap = mark.claims[0].kind === 'gap';
-      const n = mark.claims.length;
-      // A buoy is a buoy, and says how many findings it holds.
-      const text = gap ? `+${n}` : String(n);
-      const wide = Math.max(0, text.length - 2) * 7;
-      const label = gap
-        ? `${n} never mentioned in this section`
-        : n > 1
-          ? `${n} findings here`
-          : 'Finding';
+      const n = mark.claims.filter((c) => !isResolved(c)).length;
+      // A buoy is a buoy, and says how many decisions it still asks for. None left: a check.
+      const done = n === 0;
+      const text = done ? ICON.tick : gap ? `+${n}` : String(n);
+      const wide = done ? 0 : Math.max(0, text.length - 2) * 7;
+      const label = done
+        ? 'Resolved'
+        : gap
+          ? `${n} never mentioned in this section`
+          : n > 1
+            ? `${n} findings here`
+            : 'Finding';
       // Always washed when it is a word or a phrase; a passage of several lines only when pointed at.
       const washed = mark.token || at.lines.length === 1;
       const hl = at.lines
@@ -466,7 +490,7 @@ export function mount(options: MountOptions): () => void {
       const rule = at.rule
         ? `<div class="gapline" data-claim="${id}" style="--i:${i};left:${at.rule.x}px;top:${at.rule.y}px;width:${at.rule.w - wide}px;height:${at.rule.h}px"></div>`
         : '';
-      return `${ring}${hl}${rule}<button type="button" class="pin" data-claim="${id}" style="--i:${i};left:${at.pin.x - wide}px;top:${at.pin.y}px${enter ? '' : ';animation:none'}" aria-label="${label}" aria-expanded="false">${text}</button>`;
+      return `${ring}${hl}${rule}<button type="button" class="pin${done ? ' done' : ''}" data-claim="${id}" style="--i:${i};left:${at.pin.x - wide}px;top:${at.pin.y}px${enter ? '' : ';animation:none'}" aria-label="${label}" aria-expanded="false">${text}</button>`;
     });
     layer.querySelectorAll('.ring, .hl, .gapline, .pin').forEach((el) => {
       el.remove();
@@ -483,9 +507,11 @@ export function mount(options: MountOptions): () => void {
     `<button type="button" class="cb" data-act="${act}" data-tip="${tip}" data-key="${key}" aria-label="${tip}" ${attrs}>${icon}</button>`;
 
   function renderDock(): void {
-    const count = issueCount([...anchors.map((a) => a.claim), ...unplaced]);
+    const count = issueCount(
+      [...anchors.map((a) => a.claim), ...unplaced].filter((c) => !isResolved(c)),
+    );
     const filtered = store.hidden.size > 0;
-    const dismissedCount = dismissedIssues().length;
+    const resolvedCount = resolvedIssues().length;
     const state = count
       ? `<button type="button" class="cb next" data-act="next" data-tip="Next finding" data-key="N" aria-label="${count} to review. Next finding">${count}${ICON.down}</button>`
       : `<span class="cb next quiet">${checked ? (filtered ? 'None shown' : 'Clean') : 'Not checked'}</span>`;
@@ -494,7 +520,7 @@ export function mount(options: MountOptions): () => void {
       ${button('filter', ICON.filter, 'Filter', 'F', `aria-expanded="${panel === 'filter'}"${filtered ? ' data-held' : ''}`)}
       ${hasPages ? button('pages', ICON.pages, 'Pages', 'P', `aria-expanded="${panel === 'pages'}"`) : ''}
       ${button('copy', ICON.copy, 'Copy for agent', 'C', count ? '' : 'disabled')}
-      ${button('dismissed', `${ICON.undo}${dismissedCount ? `<span class="ct">${dismissedCount}</span>` : ''}`, 'Dismissed', 'Z', dismissedCount ? `aria-expanded="${panel === 'dismissed'}"` : 'disabled')}
+      ${button('resolved', `${ICON.undo}${resolvedCount ? `<span class="ct">${resolvedCount}</span>` : ''}`, 'Resolved', 'Z', resolvedCount ? `aria-expanded="${panel === 'resolved'}"` : 'disabled')}
       <hr>
       ${button('review', ICON.close, 'Close', 'Esc')}`;
     barIcon.setAttribute('aria-label', `Review docs, ${count} to review`);
@@ -567,10 +593,10 @@ export function mount(options: MountOptions): () => void {
       ${rows.length ? `<footer><span>${total} across ${withFindings} page${withFindings === 1 ? '' : 's'}</span>${total ? '<button type="button" data-act="copy-all">Copy all</button>' : ''}</footer>` : ''}`;
   }
 
-  type Dismissed = { route: string; claims: JudgedClaim[] };
+  type Resolved = { route: string; claims: JudgedClaim[] };
 
-  /** What the reader waved off, one row per decision, this page first. Nothing dismissed is ever out of reach. */
-  function dismissedIssues(): Dismissed[] {
+  /** What the reader decided, one row per decision, this page first. Nothing resolved is ever out of reach. */
+  function resolvedIssues(): Resolved[] {
     const here = routeOf(location.pathname);
     const routes = Array.isArray(data) ? { [here]: data } : data.routes;
     const order = Object.keys(routes).sort(
@@ -579,35 +605,37 @@ export function mount(options: MountOptions): () => void {
     return order.flatMap((route) => {
       const byIssue = new Map<string, JudgedClaim[]>();
       for (const claim of routes[route].flatMap((p) => p.claims)) {
-        if (!isFinding(claim) || !store.dismissed.has(claim.id)) continue;
+        if (!isFinding(claim) || !isResolved(claim)) continue;
         byIssue.set(issueKey(claim), [...(byIssue.get(issueKey(claim)) ?? []), claim]);
       }
       return [...byIssue.values()].map((claims) => ({ route, claims }));
     });
   }
 
-  function dismissedHTML(): string {
-    const issues = dismissedIssues();
+  function resolvedHTML(): string {
+    const issues = resolvedIssues();
     const here = routeOf(location.pathname);
     let last = '';
     const rows = issues.map(({ route, claims }, i) => {
       const head =
         route === last ? '' : `<p class="grp">${route === here ? 'This page' : esc(route)}</p>`;
       last = route;
-      const places = claims.length > 1 ? `<small>${claims.length} places</small>` : '';
-      return `${head}<div class="opt gone"><span><span class="say">${say(sentence(claims[0]))}</span>${places}</span><button type="button" data-act="restore-one" data-i="${i}">Restore</button></div>`;
+      const decision = store.resolved[claims[0].id];
+      const what = decision === null ? 'Not a problem' : decision || 'Real';
+      const places = claims.length > 1 ? ` · ${claims.length} places` : '';
+      return `${head}<div class="opt gone"><span><span class="say">${say(sentence(claims[0]))}</span><small>${esc(what)}${places}</small></span><button type="button" data-act="restore-one" data-i="${i}">Undo</button></div>`;
     });
-    return `<header><b>Dismissed</b><span>What you marked "not a problem". Kept in this browser.</span></header>
+    return `<header><b>Resolved</b><span>What you decided. Kept in this browser.</span></header>
       ${rows.join('')}
-      <footer><span>${issues.length} dismissed</span><button type="button" data-act="restore">Restore all</button></footer>`;
+      <footer><span>${issues.length} resolved</span><button type="button" data-act="restore">Undo all</button></footer>`;
   }
 
-  function restore(claims: JudgedClaim[] | null): void {
-    if (claims) for (const c of claims) store.dismissed.delete(c.id);
-    else store.dismissed.clear();
+  function restore(claims: JudgedClaim[] | null, enter = true): void {
+    if (claims) for (const c of claims) delete store.resolved[c.id];
+    else store.resolved = {};
     store.save();
-    sync(true);
-    if (!store.dismissed.size) panel = null;
+    sync(enter);
+    if (!Object.keys(store.resolved).length) panel = null;
     renderPanel();
     renderDock();
   }
@@ -622,10 +650,10 @@ export function mount(options: MountOptions): () => void {
     el.setAttribute('role', panel === 'filter' ? 'menu' : 'dialog');
     el.setAttribute(
       'aria-label',
-      { filter: 'Filter', pages: 'Pages', dismissed: 'Dismissed' }[panel],
+      { filter: 'Filter', pages: 'Pages', resolved: 'Resolved' }[panel],
     );
     el.tabIndex = -1;
-    el.innerHTML = { filter: filterHTML, pages: pagesHTML, dismissed: dismissedHTML }[panel]();
+    el.innerHTML = { filter: filterHTML, pages: pagesHTML, resolved: resolvedHTML }[panel]();
     dock.append(el);
   }
 
@@ -675,7 +703,8 @@ export function mount(options: MountOptions): () => void {
       mark,
       page: pageOf(mark.claims[0]),
       slices: pages.flatMap((p) => p.slices),
-      note: store.notes[mark.claims[0].id] ?? '',
+      decision: mark.claims.every(isResolved) ? store.resolved[mark.claims[0].id] : undefined,
+      resolving,
       same: { at: same.indexOf(mark) + 1, of: same.length },
     });
   }
@@ -683,6 +712,7 @@ export function mount(options: MountOptions): () => void {
   function select(id: string | null, via: { keyboard?: boolean; scroll?: boolean } = {}): void {
     selected = selected === id ? null : id;
     hoverOpened = false;
+    resolving = false;
     closePopover();
     if (selected && panel) setPanel(null);
     markSelected();
@@ -719,10 +749,11 @@ export function mount(options: MountOptions): () => void {
 
   /** What to look at next: what code proved, then what a model thinks by the odds, then down the page. Wraps. */
   function next(step = 1): void {
-    if (!marks.length) return;
+    const left = marks.filter((m) => m.claims.some((c) => !isResolved(c)));
+    if (!left.length) return;
     const score = (m: Mark): number =>
       m.claims.some((c) => c.rule) ? 2 : Math.max(...m.claims.map((c) => maxScore(c)));
-    const order = [...marks].sort(
+    const order = [...left].sort(
       (a, b) => score(b) - score(a) || marks.indexOf(a) - marks.indexOf(b),
     );
     const current = order.findIndex((m) => m.id === selected);
@@ -755,7 +786,7 @@ export function mount(options: MountOptions): () => void {
     route: string,
   ): Promise<void> {
     try {
-      await navigator.clipboard.writeText(toPrompt(from, new Set(claims), store.notes, route));
+      await navigator.clipboard.writeText(toPrompt(from, new Set(claims), store.resolved, route));
     } catch {
       return;
     }
@@ -769,6 +800,7 @@ export function mount(options: MountOptions): () => void {
     }, 1400);
   }
 
+  /** The page's findings, resolved or not: the prompt sorts them itself. */
   const copyPage = (el: HTMLElement | null): Promise<void> =>
     copy(el, pages, [...anchors.map((a) => a.claim), ...unplaced], location.pathname);
 
@@ -776,32 +808,33 @@ export function mount(options: MountOptions): () => void {
     const all = Array.isArray(data) ? data : Object.values(data.routes).flat();
     const routes = Array.isArray(data)
       ? 1
-      : Object.values(data.routes).filter((r) => shown(r).length).length;
-    return copy(el, all, shown(all), `${routes} page${routes === 1 ? '' : 's'}`);
+      : Object.values(data.routes).filter((r) => placed(r).length).length;
+    return copy(el, all, placed(all), `${routes} page${routes === 1 ? '' : 's'}`);
   }
 
-  /** One decision covers every place on the page that shows the same issue. */
-  function dismiss(claims: JudgedClaim[], whole: boolean): void {
+  /** One decision covers every place on the page that shows the same issue. The buoy stays, turned inside out. */
+  function resolve(claims: JudgedClaim[], decision: Decision): void {
     const keys = new Set(claims.map(issueKey));
-    const ids = open(pages)
-      .filter((c) => keys.has(issueKey(c)))
-      .map((c) => c.id);
-    const apply = (): void => {
-      for (const id of ids) store.dismissed.add(id);
-      store.save();
-      sync();
-    };
-    if (!whole) {
-      // One of several here: the buoy stays, its list and count shrink in place.
-      apply();
-      const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
-      const left = marks.find((m) => m.id === selected);
-      if (pop && left) pop.innerHTML = markHTML(left);
-      return;
-    }
-    layer.querySelector(`.pin[data-claim="${CSS.escape(selected ?? '')}"]`)?.classList.add('exit');
-    select(null);
-    setTimeout(apply, 200);
+    for (const c of open(pages)) if (keys.has(issueKey(c))) store.resolved[c.id] = decision;
+    store.save();
+    resolving = false;
+    sync();
+    const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
+    const mark = marks.find((m) => m.id === selected);
+    if (!pop || !mark) return;
+    pop.innerHTML = markHTML(mark);
+    // The note field is gone; keep the keyboard in the card so N moves on.
+    pop.focus({ preventScroll: true });
+  }
+
+  /** Redraw the open card without moving it. */
+  function redraw(focusNote = false): void {
+    const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
+    const mark = marks.find((m) => m.id === selected);
+    if (!pop || !mark) return;
+    pop.innerHTML = markHTML(mark);
+    placePopover();
+    if (focusNote) pop.querySelector<HTMLTextAreaElement>('.note')?.focus({ preventScroll: true });
   }
 
   function toggleFilter(key: string): void {
@@ -830,7 +863,7 @@ export function mount(options: MountOptions): () => void {
         break;
       case 'filter':
       case 'pages':
-      case 'dismissed':
+      case 'resolved':
         setPanel(el.dataset.act);
         break;
       case 'toggle':
@@ -848,15 +881,29 @@ export function mount(options: MountOptions): () => void {
       case 'copy-all':
         void copyAll(el);
         break;
-      case 'copy-mark':
-        if (mark) void copy(el, pages, mark.claims, location.pathname);
-        break;
       case 'restore':
         restore(null);
         break;
       case 'restore-one':
-        restore(dismissedIssues()[Number(el.dataset.i)]?.claims ?? []);
+        restore(resolvedIssues()[Number(el.dataset.i)]?.claims ?? []);
         break;
+      case 'undo':
+        if (mark) restore(mark.claims, false);
+        redraw();
+        break;
+      case 'resolve':
+        resolving = true;
+        redraw(true);
+        break;
+      case 'resolve-cancel':
+        resolving = false;
+        redraw();
+        break;
+      case 'resolve-done': {
+        const note = layer.querySelector<HTMLTextAreaElement>('.pop:not(.exit) .note')?.value ?? '';
+        if (mark) resolve(mark.claims, note.trim());
+        break;
+      }
       case 'more': {
         const pop = layer.querySelector('.pop:not(.exit)');
         const on = pop?.querySelector('.fold')?.classList.toggle('open') ?? false;
@@ -874,22 +921,33 @@ export function mount(options: MountOptions): () => void {
         break;
       }
       case 'dismiss-mark':
-        if (mark) dismiss(mark.claims, true);
+        if (mark) resolve(mark.claims, null);
         break;
       case 'dismiss': {
         const claim = mark?.claims.find((c) => c.id === el.dataset.id);
-        if (mark && claim) dismiss([claim], mark.claims.length === 1);
+        if (mark && claim) resolve([claim], null);
         break;
       }
     }
   }
 
-  function onInput(event: Event): void {
-    const input = event.target as HTMLTextAreaElement;
-    const id = input.dataset.note;
-    if (!id) return;
-    store.notes[id] = input.value;
-    store.save();
+  /** Enter in the note resolves; the field is one line of intent, not an essay. */
+  function onNoteKey(e: Event): void {
+    const event = e as KeyboardEvent;
+    const at = event.composedPath()[0] as HTMLElement | undefined;
+    if (!at?.matches?.('.note')) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      resolving = false;
+      redraw();
+      const pop = layer.querySelector<HTMLElement>('.pop:not(.exit)');
+      pop?.focus({ preventScroll: true });
+    } else if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      const mark = marks.find((m) => m.id === selected);
+      if (mark) resolve(mark.claims, (at as HTMLTextAreaElement).value.trim());
+    }
   }
 
   /** The wash follows the pointer: on entering a buoy, off on leaving it. The open finding and the wrong word stay lit. */
@@ -1034,7 +1092,13 @@ export function mount(options: MountOptions): () => void {
     p: () => setPanel('pages'),
     c: () => void copyPage(barIn.querySelector<HTMLElement>('[data-act="copy"]')),
     z: () => {
-      if (store.dismissed.size) setPanel('dismissed');
+      if (Object.keys(store.resolved).length) setPanel('resolved');
+    },
+    r: () => {
+      const mark = marks.find((m) => m.id === selected);
+      if (!mark || mark.claims.every(isResolved)) return;
+      resolving = true;
+      redraw(true);
     },
   };
 
@@ -1103,7 +1167,7 @@ export function mount(options: MountOptions): () => void {
   scheme.addEventListener('change', schedule);
 
   shadow.addEventListener('click', onClick);
-  shadow.addEventListener('input', onInput);
+  shadow.addEventListener('keydown', onNoteKey);
   shadow.addEventListener('pointerover', onHover);
   shadow.addEventListener('pointerout', onHover);
   document.addEventListener('pointerdown', onOutside);

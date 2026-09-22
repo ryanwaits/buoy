@@ -61,6 +61,9 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .pin::after{content:"";position:absolute;inset:-11px}
 .pin:hover{transform:scale(1.1)}
 .pin.on{box-shadow:0 2px 6px rgba(0,0,0,.2),0 0 0 2px var(--paper),0 0 0 4px var(--ink)}
+.pin.done{background:var(--paper);color:var(--ink);box-shadow:0 2px 6px rgba(0,0,0,.12),inset 0 0 0 1px color-mix(in srgb,var(--ink) 30%,transparent)}
+.pin.done svg{vertical-align:-1px}
+.pin.done.on{box-shadow:0 2px 6px rgba(0,0,0,.12),0 0 0 2px var(--paper),0 0 0 4px var(--ink)}
 .pin.exit,.leave .pin{animation:pinOut .2s ease-out both}
 @keyframes pinIn{from{opacity:0;transform:scale(.3)}}
 @keyframes pinOut{to{opacity:0;transform:scale(.3)}}
@@ -99,7 +102,12 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .more:hover{color:var(--tx)}
 .more svg{transition:transform .22s var(--out)}
 .more[aria-expanded="true"] svg{transform:rotate(180deg)}
-.note{display:block;width:100%;min-height:44px;padding:8px 10px;border-radius:8px;background:var(--fill);border:1px solid var(--line);font-size:13px;resize:none;transition:border-color .15s}
+.note{display:block;width:100%;min-height:44px;padding:8px 10px;border-radius:8px;background:var(--fill);border:1px solid var(--line);font-size:13px;line-height:1.4;resize:none;transition:border-color .15s}
+.said{padding:8px 10px;border-radius:8px;background:var(--fill);font-size:12.5px;color:var(--tx2);display:grid;gap:2px}
+.said b{color:var(--tx);font-weight:600}
+.said span{overflow-wrap:anywhere}
+.said button{justify-self:start;font-size:12px;color:var(--tx3);text-decoration:underline}
+.said button:hover{color:var(--tx)}
 .note::placeholder{color:var(--tx3)}
 .note:focus{outline:none;border-color:var(--tx2)}
 .pop-f{display:flex;align-items:center;justify-content:flex-end;gap:4px}
