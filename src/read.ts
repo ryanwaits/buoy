@@ -60,8 +60,8 @@ export function splitSections(content: string): Section[] {
     if (m) heads.push({ line: i + 1, level: m[1].length, text: m[2].trim() });
   });
   const slices = heads.length
-    ? heads.map((head) => {
-        const next = heads.find((h) => h.line > head.line && h.level <= head.level);
+    ? heads.map((head, i) => {
+        const next = heads[i + 1];
         return { heading: head.text, start: head.line, end: next?.line ?? lines.length + 1 };
       })
     : [{ heading: '', start: 1, end: lines.length + 1 }];
@@ -92,6 +92,37 @@ function proseOf(text: string): string {
     if (!fence && /[A-Za-z]/.test(line) && line.trim().length > 20) out.push(line.trim());
   }
   return out.join('\n');
+}
+
+/** A fence, or a single prose line. Words are judged only against exports named in the same window. */
+export function windowsOf(section: Section): { start: number; text: string }[] {
+  const lines = section.text.split('\n');
+  const out: { start: number; text: string }[] = [];
+  let fence: string[] | null = null;
+  let fenceAt = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const abs = section.start + i;
+    if (/^```/.test(line)) {
+      if (fence) {
+        if (fence.length) out.push({ start: fenceAt, text: fence.join('\n') });
+        fence = null;
+      } else {
+        fence = [];
+        fenceAt = abs + 1;
+      }
+      continue;
+    }
+    if (fence) {
+      fence.push(line);
+      continue;
+    }
+    if (/^#{1,6}\s/.test(line)) continue;
+    if (/[A-Za-z_$]/.test(line)) out.push({ start: abs, text: line });
+  }
+  const leftover = fence;
+  if (leftover?.length) out.push({ start: fenceAt, text: leftover.join('\n') });
+  return out;
 }
 
 function inFence(text: string, line: number): boolean {
@@ -246,66 +277,61 @@ export function checkSection(
   return { hits, mentioned: [...mentioned], words };
 }
 
-const ROLE_MIN = 0.85;
-const INTENT_MIN = 0.7;
-const PASSED_MAX = 0.25;
-const QUIET_INTENT = new Set(['data_example', 'mention', 'older_version', 'not_this']);
+const CLAIM_MIN = 0.85;
 
 /**
- * A proof only when Jev is sure the word is an API claim and the record lacks it,
- * or sure a real call skipped a required name. Example data and comments stay quiet.
+ * One noul per fact. No second guess (intent) to veto it.
+ * option / member: the word is claimed as API and the record lacks it.
+ * omits: a call leaves out a required name. High means missing.
  */
 export function roleProofs(
   fact: Fact,
   section: Section,
-  intent: string,
-  intentConfidence: number,
-  roles: Record<string, number>,
-  passed: Record<string, number>,
+  options: Record<string, number>,
+  members: Record<string, number>,
+  omits: Record<string, number>,
 ): Hit[] {
   const hits: Hit[] = [];
-  const structural = intent === 'real_call' || intent === 'signature';
-  const sure = intentConfidence >= INTENT_MIN && structural && !QUIET_INTENT.has(intent);
-  if (sure) {
-    const known = new Set([
-      fact.name,
-      ...fact.allowed,
-      ...fact.members,
-      ...fact.required,
-      ...fact.oneOf.flat(),
-    ]);
-    for (const [word, score] of Object.entries(roles)) {
-      if (score < ROLE_MIN || known.has(word)) continue;
-      hits.push({
-        line: section.start + lineOf(section.text, section.text.search(boundary(word))) - 1,
-        exportName: fact.name,
-        type: 'absent-name',
-        text: word,
-        issue: `'${word}' is not part of '${fact.name}'`,
-      });
-    }
-    for (const req of fact.required) {
-      if (req === 'children') continue;
-      if ((passed[req] ?? 1) <= PASSED_MAX) {
-        hits.push({
-          line: section.start,
-          exportName: fact.name,
-          type: 'missing-required',
-          text: fact.name,
-          issue: `Call '${fact.name}' is missing required argument '${req}'`,
-        });
-      }
-    }
-    if (fact.oneOf.length > 0 && (passed.one_of ?? 1) <= PASSED_MAX) {
-      const arms = fact.oneOf.map((arm) => `'${arm.join(' + ')}'`).join(' or ');
+  const known = new Set([
+    fact.name,
+    ...fact.allowed,
+    ...fact.members,
+    ...fact.required,
+    ...fact.oneOf.flat(),
+  ]);
+  const absent = (word: string, score: number): void => {
+    if (score < CLAIM_MIN || known.has(word)) return;
+    hits.push({
+      line: section.start + lineOf(section.text, section.text.search(boundary(word))) - 1,
+      exportName: fact.name,
+      type: 'absent-name',
+      text: word,
+      issue: `'${word}' is not part of '${fact.name}'`,
+    });
+  };
+  for (const [word, score] of Object.entries(options)) absent(word, score);
+  for (const [word, score] of Object.entries(members)) absent(word, score);
+  for (const req of fact.required) {
+    if (req === 'children') continue;
+    if ((omits[req] ?? 0) >= CLAIM_MIN) {
       hits.push({
         line: section.start,
         exportName: fact.name,
         type: 'missing-required',
         text: fact.name,
-        issue: `Call '${fact.name}' needs one of ${arms}`,
+        issue: `Call '${fact.name}' is missing required argument '${req}'`,
       });
     }
+  }
+  if (fact.oneOf.length > 0 && (omits.one_of ?? 0) >= CLAIM_MIN) {
+    const arms = fact.oneOf.map((arm) => `'${arm.join(' + ')}'`).join(' or ');
+    hits.push({
+      line: section.start,
+      exportName: fact.name,
+      type: 'missing-required',
+      text: fact.name,
+      issue: `Call '${fact.name}' needs one of ${arms}`,
+    });
   }
   return hits;
 }
@@ -355,18 +381,20 @@ type Answer = {
 export type ReadCache = Record<
   string,
   {
-    intent: string;
-    intentConfidence: number;
-    relation: string;
-    relationConfidence: number;
-    roles: Record<string, number>;
-    passed: Record<string, number>;
+    about?: string;
+    aboutConfidence?: number;
+    aboutScores?: Record<string, number>;
+    relation?: string;
+    relationConfidence?: number;
+    options?: Record<string, number>;
+    members?: Record<string, number>;
+    omits?: Record<string, number>;
   }
 >;
 
 export type ReadStats = { requests: number; cached: number; inputTokens: number; model?: string };
 
-const WORD_CAP = 24;
+const WORD_CAP = 80;
 
 export async function readPage(
   file: string,
@@ -383,18 +411,25 @@ export async function readPage(
     const found = checkSection(section, index);
     for (const hit of found.hits) claims.push(claimFor(file, section, hit));
     if (section.older || !classifier) continue;
-    for (const fact of found.mentioned) {
-      const judged = await judge(
-        file,
-        section,
-        fact,
-        found.words,
-        importFrom,
-        classifier,
-        cache,
-        stats,
-      );
-      claims.push(...judged);
+    for (const win of windowsOf(section)) {
+      const words = wordsOf(win.text);
+      const prose = !win.text.includes('\n');
+      const candidates: Fact[] = [];
+      const seen = new Set<string>();
+      for (const [name, fact] of index) {
+        const named = mentionedIn(win.text, name) || (prose && mentionedIn(section.heading, name));
+        if (!named || seen.has(fact.name)) continue;
+        seen.add(fact.name);
+        candidates.push(fact);
+      }
+      if (!candidates.length) continue;
+      const window: Section = { ...section, start: win.start, text: win.text };
+      const routed = await route(window, candidates, classifier, cache, stats);
+      for (const fact of candidates) {
+        if ((routed.about[fact.name] ?? 0) < ROUTE_MIN) continue;
+        const judged = await judge(file, window, fact, words, importFrom, classifier, cache, stats);
+        claims.push(...judged);
+      }
     }
   }
   return { claims, stats };
@@ -407,7 +442,7 @@ function merge(specs: OpenPkgSpec[]): OpenPkgSpec {
   };
 }
 
-function unknownWords(fact: Fact, words: string[]): string[] {
+function unknownWords(fact: Fact, words: string[], text: string): string[] {
   const known = new Set([
     fact.name,
     ...fact.allowed,
@@ -415,7 +450,65 @@ function unknownWords(fact: Fact, words: string[]): string[] {
     ...fact.required,
     ...fact.oneOf.flat(),
   ]);
-  return words.filter((word) => !known.has(word)).slice(0, WORD_CAP);
+  const unknown = words.filter((word) => !known.has(word));
+  const near: string[] = [];
+  const rest: string[] = [];
+  for (const word of unknown) {
+    if (sameLine(text, fact.name, word)) near.push(word);
+    else rest.push(word);
+  }
+  return [...near, ...rest].slice(0, WORD_CAP);
+}
+
+function sameLine(text: string, exportName: string, word: string): boolean {
+  for (const line of text.split('\n')) {
+    if (boundary(exportName).test(line) && boundary(word).test(line)) return true;
+  }
+  return false;
+}
+
+const ROUTE_MIN = 0.7;
+
+async function route(
+  window: Section,
+  candidates: Fact[],
+  classifier: Classifier,
+  cache: ReadCache,
+  stats: ReadStats,
+): Promise<{ about: Record<string, number> }> {
+  const names = candidates.map((item) => item.name);
+  const state = {
+    heading: window.heading,
+    block: window.text.slice(0, 4000),
+    names,
+  };
+  const key = createHash('sha256')
+    .update(`r2\0${JSON.stringify(state)}`)
+    .digest('hex');
+  const cached = cache[key];
+  if (cached?.aboutScores) {
+    stats.cached++;
+    return { about: cached.aboutScores };
+  }
+  const questions: Record<string, Question> = {};
+  for (const name of names) {
+    questions[`about_${name}`] = {
+      type: 'noul',
+      instructions: `Is this block documenting \`${name}\`: a call of it, a type shape for it, or prose about it? Nested in the same sample as another export still counts. A comment, a value, or a sample of a different API does not.`,
+      criteria: {
+        true: `This block is about \`${name}\`.`,
+        false: `This block is not about \`${name}\`.`,
+      },
+    };
+  }
+  const result = await classifier.evaluate({ state, questions });
+  stats.requests++;
+  stats.inputTokens += result.usage.inputTokens;
+  stats.model = result.model;
+  const about: Record<string, number> = {};
+  for (const name of names) about[name] = yes(result.answers[`about_${name}`] as Answer);
+  cache[key] = { aboutScores: about };
+  return { about };
 }
 
 async function judge(
@@ -428,7 +521,7 @@ async function judge(
   cache: ReadCache,
   stats: ReadStats,
 ): Promise<JudgedClaim[]> {
-  const unknown = unknownWords(fact, words);
+  const unknown = unknownWords(fact, words, section.text);
   const state = {
     export: {
       name: fact.name,
@@ -444,26 +537,13 @@ async function judge(
     words: unknown,
   };
   const key = createHash('sha256')
-    .update(`b3\0${JSON.stringify(state)}`)
+    .update(`b6\0${JSON.stringify(state)}`)
     .digest('hex');
   const cached = cache[key];
-  let answer = cached?.intent ? cached : undefined;
+  let answer = cached?.options && cached.members && cached.omits ? cached : undefined;
   if (answer) stats.cached++;
   else {
     const questions: Record<string, Question> = {
-      intent: {
-        type: 'choice',
-        instructions: 'What is this section doing with `export.name`?',
-        criteria: {
-          real_call: 'A sample shows a working call of this export and the options it passes.',
-          signature: 'The section is teaching the parameter names of this export.',
-          data_example:
-            'A value is being stored or constructed. Keys are example data, not the API of this export.',
-          mention: 'The export is named, not called, and no option or member is being claimed.',
-          older_version: 'The sample is explicitly an older version.',
-          not_this: 'The section is not about this export.',
-        },
-      },
       relation: {
         type: 'choice',
         instructions: 'How does the prose in `section` relate to `export.description`?',
@@ -475,34 +555,42 @@ async function judge(
       },
     };
     for (const word of unknown) {
-      questions[`role_${word}`] = {
+      questions[`option_${word}`] = {
         type: 'noul',
-        instructions: `Does the section claim that \`${word}\` is an option, a parameter, or a member of \`${fact.name}\` itself? A value in an example, a word in a comment, a field of data stored in an example, and a method on a value the call returns are not that.`,
+        instructions: `Is \`${word}\` the *name* of a prop or option of a call to \`${fact.name}\` (the key, or the JSX prop)? A value assigned to an option (\`auth: myAuthHandler\`) is not. A field of stored example data is not.`,
         criteria: {
-          true: `\`${word}\` is claimed as part of the API of \`${fact.name}\`.`,
-          false: `\`${word}\` is prose, a comment, a value, or example data.`,
+          true: `\`${word}\` is the name of an option of \`${fact.name}\`.`,
+          false: `\`${word}\` is a value, a comment, or unrelated.`,
+        },
+      };
+      questions[`member_${word}`] = {
+        type: 'noul',
+        instructions: `Does the section say that \`${fact.name}\` has a field or method named \`${word}\`? A documented method (\`delete(key)\`) is that. A field of example data stored in an instance is not. A method on a value some other call returned is not.`,
+        criteria: {
+          true: `The section claims \`${fact.name}\` has \`${word}\`.`,
+          false: `\`${word}\` is not claimed as a member of \`${fact.name}\`.`,
         },
       };
     }
     for (const req of fact.required) {
       if (req === 'children') continue;
-      questions[`passed_${req}`] = {
+      questions[`omits_${req}`] = {
         type: 'noul',
-        instructions: `Does a real call of \`${fact.name}\` in the section pass \`${req}\`?`,
+        instructions: `Is there a call of \`${fact.name}\` in this section that leaves out required \`${req}\`? A mention without a call is not an omission.`,
         criteria: {
-          true: `The call passes \`${req}\`.`,
-          false: `A real call is shown and \`${req}\` is absent.`,
+          true: `A call of \`${fact.name}\` is shown and \`${req}\` is not passed.`,
+          false: `There is no such omitting call.`,
         },
       };
     }
     if (fact.oneOf.length) {
       const arms = fact.oneOf.map((arm) => arm.join(' or ')).join(', or ');
-      questions.passed_one_of = {
+      questions.omits_one_of = {
         type: 'noul',
-        instructions: `Does a real call of \`${fact.name}\` pass at least one of ${arms}?`,
+        instructions: `Is there a call of \`${fact.name}\` that passes none of ${arms}? A mention without a call is not that.`,
         criteria: {
-          true: 'One of those is passed.',
-          false: 'A real call is shown and none of them is passed.',
+          true: 'A call is shown and none of those is passed.',
+          false: 'There is no such omitting call.',
         },
       };
     }
@@ -511,39 +599,39 @@ async function judge(
     stats.inputTokens += result.usage.inputTokens;
     stats.model = result.model;
     const answers = result.answers as Record<string, Answer>;
-    const intent = choiceOf(answers.intent);
     const relation = choiceOf(answers.relation);
-    const roles: Record<string, number> = {};
-    const passed: Record<string, number> = {};
-    for (const word of unknown) roles[word] = yes(answers[`role_${word}`]);
-    for (const req of fact.required) passed[req] = yes(answers[`passed_${req}`]);
-    if (fact.oneOf.length) passed.one_of = yes(answers.passed_one_of);
+    const options: Record<string, number> = {};
+    const members: Record<string, number> = {};
+    const omits: Record<string, number> = {};
+    for (const word of unknown) {
+      options[word] = yes(answers[`option_${word}`]);
+      members[word] = yes(answers[`member_${word}`]);
+    }
+    for (const req of fact.required) omits[req] = yes(answers[`omits_${req}`]);
+    if (fact.oneOf.length) omits.one_of = yes(answers.omits_one_of);
     answer = {
-      intent: intent.choice,
-      intentConfidence: intent.confidence,
       relation: relation.choice,
       relationConfidence: relation.confidence,
-      roles,
-      passed,
+      options,
+      members,
+      omits,
     };
     cache[key] = answer;
   }
+  const options = answer.options ?? {};
+  const members = answer.members ?? {};
+  const omits = answer.omits ?? {};
+  const relation = answer.relation ?? 'says_nothing';
+  const relationConfidence = answer.relationConfidence ?? 0;
   const claims: JudgedClaim[] = [];
-  for (const hit of roleProofs(
-    fact,
-    section,
-    answer.intent,
-    answer.intentConfidence,
-    answer.roles,
-    answer.passed,
-  )) {
+  for (const hit of roleProofs(fact, section, options, members, omits)) {
     claims.push(claimFor(file, section, hit));
   }
   if (
     section.prose &&
     fact.description &&
-    answer.relation === 'contradicts' &&
-    answer.relationConfidence >= 0.8
+    relation === 'contradicts' &&
+    relationConfidence >= 0.8
   ) {
     claims.push({
       id: `${file}:${section.start}:behaviour:${fact.name}`,
@@ -556,7 +644,7 @@ async function judge(
         ...(section.heading ? { headingText: section.heading.replace(/`/g, '') } : {}),
       },
       specRef: { export: fact.name },
-      jev: { stale: 0, incomplete: 0, inaccurate: answer.relationConfidence, reason: 'prose' },
+      jev: { stale: 0, incomplete: 0, inaccurate: relationConfidence, reason: 'prose' },
     });
   }
   return claims;
