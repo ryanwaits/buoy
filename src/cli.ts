@@ -13,12 +13,13 @@ import { extract } from '@openpkg-ts/sdk';
 import { normalize } from '@openpkg-ts/spec';
 import { type Config, entryFor, entryPath } from './config';
 import { declaredAt } from './declared';
-import type { OpenPkgSpec } from './lookout/evidence';
+import { excerptsFor } from './excerpts';
+import { type OpenPkgSpec, type SpecRecord, specRecord } from './lookout/evidence';
 import { type JudgeCache, judge } from './lookout/judge';
 import { isFinding } from './policy';
 import { renderedToMarkdown } from './rendered';
 import { jev } from './sonar';
-import type { JudgedPage, Manifest } from './types';
+import type { JudgedClaim, JudgedPage, Manifest } from './types';
 
 function fail(message: string): never {
   console.error(`buoy: ${message}`);
@@ -103,6 +104,23 @@ async function build(configPath: string): Promise<void> {
   const judged = { requests: 0, cached: 0, inputTokens: 0, model: '' };
 
   const manifest: Manifest = { version: 1, routes: {} };
+
+  /** The record the judge reads for each cited export, so the card can show what was checked. */
+  const recordsFor = (
+    claims: JudgedClaim[],
+    specs: OpenPkgSpec[],
+  ): Record<string, SpecRecord> | undefined => {
+    const out: Record<string, SpecRecord> = {};
+    for (const name of new Set(claims.flatMap((c) => c.specRef?.export ?? []))) {
+      for (const s of specs) {
+        const entry = s.exports.find((e) => e.name === name);
+        if (!entry) continue;
+        out[name] = specRecord(s, entry);
+        break;
+      }
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
   let findings = 0;
   const check = async (
     route: string,
@@ -135,7 +153,15 @@ async function build(configPath: string): Promise<void> {
     const entry = configured ? entryPath(configured) : '';
     const pages = documents.map(findingsOnly).map((page) => {
       const declared = declaredAt(page.claims, [spec, ...also], base);
-      return { ...page, source: { mode, entry }, ...(declared ? { declared } : {}) };
+      const excerpts = declared ? excerptsFor(page.claims, declared, base) : undefined;
+      const records = recordsFor(page.claims, [spec, ...also]);
+      return {
+        ...page,
+        source: { mode, entry },
+        ...(declared ? { declared } : {}),
+        ...(excerpts ? { excerpts } : {}),
+        ...(records ? { records } : {}),
+      };
     });
     findings += pages.flatMap((p) => p.claims).length;
     add(manifest, route, pages);

@@ -1,0 +1,11 @@
+/** A room. */
+export class Room extends Base {
+  readonly roomId: string;
+  private readonly userId: string;
+
+  connect(): void {}
+
+  send(message: string): boolean {
+    return true;
+  }
+}

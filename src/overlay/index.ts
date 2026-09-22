@@ -259,16 +259,47 @@ function viewsOf(
     });
   }
   if (signature || ref) {
-    const has = claim.jev?.has ?? [];
-    const names = new Set(claim.jev?.names ?? []);
+    const record = ref ? page?.records?.[ref.export] : undefined;
+    const named = new Set(offending(claim));
+    const missing = claim.rule?.type === 'prose-missing-required';
+    const unknown = claim.rule?.type === 'prose-unknown-key';
+    // The parameters or props the record has, each with what the finding says about it.
+    const params = record?.props ?? record?.parameters ?? [];
+    const rows = params.map((p) => {
+      const hit = named.has(p.name);
+      const flag = p.required
+        ? 'required'
+        : p.default !== undefined
+          ? `= ${p.default}`
+          : 'optional';
+      return `<span${hit && missing ? ' class="warn"' : ''}>${esc(p.name)}</span><span class="t">${esc(p.type)}</span><span class="f">${esc(flag)}${hit && missing ? ' · missing here' : ''}</span>`;
+    });
+    if (unknown)
+      for (const n of named)
+        if (n !== ref?.export && !params.some((p) => p.name === n))
+          rows.push(
+            `<span class="bad">${esc(n)}</span><span class="t">not ${record?.props ? 'a prop' : 'a parameter'}</span><span class="f">used here</span>`,
+          );
+    const table = rows.length
+      ? `<p class="cap">${record?.props ? 'Props' : 'Parameters'}</p><div class="tbl">${rows.join('')}</div>`
+      : '';
+    // Members: the record's list when the build wrote one, else what the judge was told.
+    const has =
+      record?.members?.map((m) => memberLabel(m, record.name)) ??
+      (claim.jev?.has ?? []).map((m) => ({ name: m, params: '' }));
+    const bad = new Set(claim.jev?.names ?? []);
+    const more = record?.otherMembers?.length
+      ? `<code><span>… ${record.otherMembers.length} more</span></code>`
+      : '';
     const memberRows = has.length
-      ? `<p class="cap">Members the spec has</p><div class="members">${[...has.map((m) => `<code>${esc(m)}</code>`), ...[...names].map((m) => `<code class="bad">${esc(m)}<span> · not a member</span></code>`)].join('')}</div>`
+      ? `<p class="cap">Members</p><div class="members">${[...has.map((m) => `<code><b>${esc(m.name)}</b><span>${esc(m.params)}</span></code>`), ...[...bad].map((m) => `<code class="bad">${esc(m)}<span> · not a member</span></code>`)].join('')}${more}</div>`
       : '';
     const facts = [
       signature ? `<dt>spec</dt><dd>${esc(signature)}</dd>` : '',
-      claim.rule?.suggestion?.startsWith('Allowed: ')
+      !record && claim.rule?.suggestion?.startsWith('Allowed: ')
         ? `<dt>allowed</dt><dd>${esc(claim.rule.suggestion.slice(9))}</dd>`
         : '',
+      record?.returns && !record.props ? `<dt>returns</dt><dd>${esc(record.returns)}</dd>` : '',
       ref?.deprecated
         ? `<dt></dt><dd>@deprecated ${esc(ref.deprecationNote ?? '')}${ref.replacement ? ` → ${esc(ref.replacement)}` : ''}</dd>`
         : '',
@@ -276,16 +307,33 @@ function viewsOf(
     views.push({
       key: 'spec',
       brief: esc(clip(signature ?? ref?.export ?? '', 60)),
-      html: `<dl class="facts mono">${facts}</dl>${memberRows}`,
+      html: `${record?.description ? `<p class="cap">${esc(clip(record.description, 200))}</p>` : ''}<dl class="facts mono">${facts}</dl>${table}${memberRows}`,
     });
   }
   const declared = ref ? page?.declared?.[ref.export] : undefined;
-  if (declared)
+  if (declared && ref) {
+    const own = ref.member ? page?.excerpts?.[`${ref.export}.${ref.member}`] : undefined;
+    const excerpt = own ?? page?.excerpts?.[ref.export];
+    const where = excerpt ? `${excerpt.file}:${excerpt.at}` : declared;
+    const code = excerpt
+      ? `<pre class="code">${excerpt.lines
+          .map((l, i) => {
+            const n = excerpt.from + i;
+            return `<div${n === excerpt.at ? ' class="hit"' : ''}><span>${n}</span><span>${esc(l)}</span></div>`;
+          })
+          .join('')}</pre>`
+      : '';
+    const note = !excerpt
+      ? `<p class="cap">Where the spec found <code>${esc(ref.export)}</code>. The build did not read the file.</p>`
+      : ref.member && !own
+        ? `<p class="cap"><code>${esc(ref.member)}</code> is not declared in this file: inherited, or built from a type. This is the export.</p>`
+        : '';
     views.push({
       key: 'source',
-      brief: esc(declared),
-      html: `<div class="meta"><span class="path">${esc(declared)}</span><button type="button" class="mini" data-act="copy-text" data-text="${esc(declared)}">Copy path</button></div><p class="cap">Where the spec found <code>${esc(ref?.export ?? '')}</code> declared.</p>`,
+      brief: esc(where),
+      html: `<div class="meta"><span class="path">${esc(where)}</span><button type="button" class="mini" data-act="copy-text" data-text="${esc(where)}">Copy path</button></div>${code}${note}`,
     });
+  }
   const jev = claim.jev;
   if (jev && !claim.rule) {
     const bars = DIMENSIONS.map(

@@ -12,7 +12,7 @@ Buoy (`@driftdev/buoy`): docs-review overlay devtool. Drift finds it, Buoy marks
 - Never mutate the host DOM. Overlay layer only (Shadow DOM, rects from Ranges). React hosts re-render.
 - A buoy is a buoy: one identical solid circle in the host's heading ink. Proved (rule) vs likely (Jev) is told in the popover's top line only, and by the Evidence filter. Chrome is neutral; the one colour is the yellow wash behind the wrong word. Visual language follows agentation.com.
 - Popover sentences are code templates (`output.sentence`), never model text.
-- Drift's `PageDocument`/`Claim` is frozen. Buoy adds only `claim.jev` (scores, `reason`, and for `members` findings `names` + `has`, worked out by code) and page-level `source` + `declared`. Need more from Drift → note the gap, fix it in Drift, don't fork the schema.
+- Drift's `PageDocument`/`Claim` is frozen. Buoy adds only `claim.jev` (scores, `reason`, and for `members` findings `names` + `has`, worked out by code) and page-level `source`, `declared`, `excerpts` (a few source lines per cited declaration) and `records` (the spec record each export was checked against), all written by the build. Need more from Drift → note the gap, fix it in Drift, don't fork the schema.
 - Unplaced claims are surfaced, never dropped.
 - Core is vanilla TS, zero runtime deps: Mintlify takes plain `.js` only, Blume is Astro. React is a thin wrapper.
 - Dev-only for now. No prod/preview gating.

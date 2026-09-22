@@ -1,4 +1,6 @@
 import type { Claim, PageDocument } from '@driftdev/sdk';
+import type { Excerpt } from './excerpts';
+import type { SpecRecord } from './lookout/evidence';
 import type { Reason } from './lookout/thresholds';
 
 export type {
@@ -10,6 +12,7 @@ export type {
   SpecRef,
   SpecSlice,
 } from '@driftdev/sdk';
+export type { Excerpt, SpecRecord };
 
 /**
  * Jev's reading of a claim. Probabilities, never verdicts. There is no separate
@@ -39,6 +42,10 @@ export type JudgedPage = Omit<PageDocument, 'claims'> & {
   source?: { mode: 'markdown' | 'rendered'; entry: string };
   /** Where each export on this page is declared, `file:line` from the spec, keyed by export name. */
   declared?: Record<string, string>;
+  /** A few lines of source at each declaration, keyed by export name and `Export.member`. Build-time only. */
+  excerpts?: Record<string, Excerpt>;
+  /** The spec record each export was checked against, keyed by export name. Build-time only. */
+  records?: Record<string, SpecRecord>;
 };
 
 /** Written by `buoy build`. Routes are URL pathnames without a trailing slash. */

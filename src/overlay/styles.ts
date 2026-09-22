@@ -116,6 +116,15 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .quote{margin:0;padding:8px 10px;border-radius:8px;background:var(--fill);font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .quote mark{color:inherit;border-radius:3px;padding:0 2px;background:color-mix(in srgb,var(--mark) var(--wash),transparent)}
 .cap{margin:0;font-size:11.5px;line-height:1.4;color:var(--tx3)}
+.tbl{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:3px 10px;padding:9px 11px;border-radius:8px;background:var(--fill);font-size:12px;line-height:1.6}
+.tbl .t{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tbl .f{font-size:10.5px;color:var(--tx3);text-align:right;white-space:nowrap}
+.tbl .bad{text-decoration:line-through;text-decoration-color:var(--tx3)}
+.tbl .warn{font-weight:600}
+.code{margin:0;padding:8px 0;border-radius:8px;background:var(--fill);font-size:11.5px;line-height:1.65;overflow-x:auto}
+.code div{display:grid;grid-template-columns:34px max-content;white-space:pre;padding-right:10px;min-width:100%}
+.code div>span:first-child{color:var(--tx3);text-align:right;padding-right:10px;user-select:none}
+.code .hit{background:color-mix(in srgb,var(--mark) 28%,transparent)}
 .mini{border:1px solid var(--line);border-radius:999px;padding:1px 9px;font-size:11px;font-weight:500;color:var(--tx2)}
 .mini:hover{color:var(--tx);border-color:var(--tx2)}
 .bar{display:grid;grid-template-columns:78px minmax(0,1fr) 30px;gap:8px;align-items:center;font-size:12px}
