@@ -61,9 +61,9 @@ code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 .pin::after{content:"";position:absolute;inset:-11px}
 .pin:hover{transform:scale(1.1)}
 .pin.on{box-shadow:0 2px 6px rgba(0,0,0,.2),0 0 0 2px var(--paper),0 0 0 4px var(--ink)}
-.pin.done{background:var(--paper);color:var(--ink);box-shadow:0 2px 6px rgba(0,0,0,.12),inset 0 0 0 1px color-mix(in srgb,var(--ink) 30%,transparent)}
+/* Resolved: the same solid buoy, the tick in place of the count. */
+.pin.done{opacity:.85}
 .pin.done svg{vertical-align:-1px}
-.pin.done.on{box-shadow:0 2px 6px rgba(0,0,0,.12),0 0 0 2px var(--paper),0 0 0 4px var(--ink)}
 .pin.exit,.leave .pin{animation:pinOut .2s ease-out both}
 @keyframes pinIn{from{opacity:0;transform:scale(.3)}}
 @keyframes pinOut{to{opacity:0;transform:scale(.3)}}
