@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { OpenPkgSpec } from '../src/lookout/evidence';
-import { checkSection, factsOf, readPage, splitSections } from '../src/read';
+import { checkSection, factsOf, readPage, roleProofs, splitSections } from '../src/read';
 import type { Classifier } from '../src/sonar';
 
 const spec: OpenPkgSpec = {
@@ -90,8 +90,20 @@ const spec: OpenPkgSpec = {
   ],
 };
 
-const issues = (text: string, from = ['ai']): string[] =>
-  checkSection(splitSections(text)[0], factsOf(spec), from).hits.map((hit) => hit.issue);
+const section = (text: string) => splitSections(text)[0];
+const fact = (name: string) => factsOf(spec).get(name)!;
+
+const proved = (
+  name: string,
+  text: string,
+  intent: string,
+  roles: Record<string, number>,
+  passed: Record<string, number> = {},
+  intentConfidence = 0.9,
+) =>
+  roleProofs(fact(name), section(text), intent, intentConfidence, roles, passed).map(
+    (hit) => hit.issue,
+  );
 
 test('a heading section is one slice, and a fence title can mark it as the old version', () => {
   const [first, second] = splitSections('# Use\n\nCall it.\n\n## Before\n\nold\n');
@@ -102,61 +114,106 @@ test('a heading section is one slice, and a fence title can mark it as the old v
   expect(titled[0].older).toBe(true);
 });
 
-test('an option the record does not have is a proof', () => {
-  expect(
-    issues("const { messages } = useChat({\n  api: '/api/chat',\n  onData() {},\n});"),
-  ).toContain("'api' is not an option of 'useChat'");
+test('the scanner itself does not decide that a word is an API claim', () => {
+  const noisy = factsOf({
+    exports: [
+      {
+        name: 'WebSocket',
+        kind: 'class',
+        signatures: [{ parameters: [{ name: 'url', required: true, schema: { type: 'string' } }] }],
+        members: [{ name: 'send' }],
+      },
+      {
+        name: 'LiveObject',
+        kind: 'class',
+        members: [{ name: 'get' }, { name: 'set' }],
+      },
+      {
+        name: 'generateKeyBetween',
+        kind: 'function',
+        signatures: [
+          {
+            parameters: [
+              { name: 'a', required: false },
+              { name: 'b', required: false },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  const samples = [
+    '// open WebSocket (called automatically by joinRoom)',
+    'const shape = new LiveObject({ name: "Untitled", x: 1, y: 2 });',
+    'const between = generateKeyBetween(first, after);',
+  ];
+  for (const sample of samples) {
+    expect(checkSection(section(sample), noisy).hits).toEqual([]);
+  }
 });
 
-test('a call that drops a required argument, or one of a required pair, is a proof', () => {
-  const found = issues(`const result = await generateText({
-  model: 'x',
-  tools: {},
-  onStepEnd() {},
-});`);
-  expect(found.some((issue) => issue.includes('needs one of'))).toBe(true);
-  expect(found.some((issue) => issue.includes('missing required'))).toBe(false);
-});
-
-test('a required argument that is present is quiet, and an elided call is not missing it', () => {
-  expect(
-    issues("const chat = useChat({ id: 'inbox', messages });").some((issue) =>
-      issue.includes('missing required'),
-    ),
-  ).toBe(false);
-  expect(
-    issues('const chat = useChat({ ...rest });').some((issue) =>
-      issue.includes('missing required'),
-    ),
-  ).toBe(false);
-});
-
-test('a positional name the signature does not have is a proof', () => {
-  expect(issues('const Action = empty(requirement, message);')).toContain(
-    "'requirement' is not a parameter of 'empty'",
+test('a sure role that the record lacks is a proof, and a low role is not', () => {
+  const text = "useChat({ api: '/api/chat', onData() {} })";
+  expect(proved('useChat', text, 'real_call', { api: 0.95 })).toContain(
+    "'api' is not part of 'useChat'",
   );
+  expect(proved('useChat', text, 'real_call', { api: 0.4 })).toEqual([]);
+  expect(proved('useChat', text, 'data_example', { api: 0.95 })).toEqual([]);
 });
 
-test('an import rename written with a colon flags the name that is not exported', () => {
-  expect(issues("import { create: actualCreate } from 'zustand'", ['zustand'])).toContain(
-    "Import 'actualCreate' is not exported",
-  );
-  expect(issues("import { create as actualCreate } from 'zustand'", ['zustand'])).toEqual([]);
+test('example data and comment words stay quiet even if they sit next to the name', () => {
+  expect(
+    proved('useChat', '// open WebSocket (called automatically by joinRoom)', 'mention', {
+      called: 0.1,
+      automatically: 0.05,
+      by: 0.05,
+      joinRoom: 0.1,
+    }),
+  ).toEqual([]);
+  expect(
+    proved('useChat', 'new LiveObject({ name: "Untitled", x: 1, y: 2 })', 'data_example', {
+      name: 0.9,
+      x: 0.9,
+      y: 0.9,
+    }),
+  ).toEqual([]);
+  expect(
+    proved('useChat', 'generateKeyBetween(first, after)', 'real_call', {
+      first: 0.2,
+      after: 0.15,
+    }),
+  ).toEqual([]);
 });
 
-test('a shape in a sentence flags a member the record does not have', () => {
-  expect(issues('PresenceUser — { userId, displayName, onlineStatus, joinedAt }')).toContain(
-    "'joinedAt' is not a member of 'PresenceUser'",
+test('a required argument is a proof only when a real call skipped it', () => {
+  const text = 'generateText({ model, tools, onStepEnd() {} })';
+  expect(proved('generateText', text, 'real_call', {}, { one_of: 0.1 }).join('\n')).toContain(
+    'needs one of',
   );
-  expect(issues('PresenceUser — { userId, displayName, connectedAt }')).toEqual([]);
+  expect(proved('generateText', text, 'real_call', {}, { one_of: 0.9 })).toEqual([]);
+  expect(proved('useChat', 'useChat({ onData() {} })', 'real_call', {}, { id: 0.1 })).toContain(
+    "Call 'useChat' is missing required argument 'id'",
+  );
+  expect(proved('useChat', 'useChat({ id })', 'mention', {}, { id: 0.1 })).toEqual([]);
+});
+
+test('a member the type is said to have, and does not, is a proof', () => {
+  expect(
+    proved('PresenceUser', 'PresenceUser — { userId, displayName, joinedAt }', 'signature', {
+      joinedAt: 0.92,
+      onlineStatus: 0.2,
+    }),
+  ).toEqual(["'joinedAt' is not part of 'PresenceUser'"]);
 });
 
 test('a deprecated export taught as current is a proof, and an older-version label is not', () => {
-  expect(issues('String formats:\nz.cuid();\nz.cuid2();')).toContain(
+  const hit = (text: string) =>
+    checkSection(section(text), factsOf(spec)).hits.map((item) => item.issue);
+  expect(hit('String formats:\nz.cuid();\nz.cuid2();')).toContain(
     "'cuid' is deprecated, and this still teaches it as current",
   );
-  expect(issues('```ts title="AI SDK 4.0"\nz.cuid();\n```')).toEqual([]);
-  expect(issues('z.cuid() is deprecated. Use cuid2.')).toEqual([]);
+  expect(hit('```ts title="AI SDK 4.0"\nz.cuid();\n```')).toEqual([]);
+  expect(hit('z.cuid() is deprecated. Use cuid2.')).toEqual([]);
 });
 
 test('a behaviour contradiction is the only question sent to Jev', async () => {
@@ -171,6 +228,11 @@ test('a behaviour contradiction is the only question sent to Jev', async () => {
         model: 'fake',
         usage: { inputTokens: 10, outputTokens: 0 },
         answers: {
+          intent: {
+            type: 'choice' as const,
+            choice: 'mention',
+            probabilities: { mention: 0.9, real_call: 0.02, not_this: 0.08 },
+          },
           relation: {
             type: 'choice' as const,
             choice: contradicts ? 'contradicts' : 'says_nothing',

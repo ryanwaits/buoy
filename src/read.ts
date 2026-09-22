@@ -1,15 +1,15 @@
 /**
  * One heading section, one export, a thin record.
  *
- * Code proves a name in a use position that the record does not have, and a
- * required argument a call does not pass. Jev is asked one question: does the
- * prose contradict the description. An older-version label, lifted by the scan,
- * drops the section before either runs.
+ * Code lists the words. Jev says what each word is doing (an API claim, or a
+ * value, a comment, example data). Code writes a proof only when that answer
+ * is extreme and the word is absent from the record. The description question
+ * is the behaviour buoy.
  */
 
 import { createHash } from 'node:crypto';
 import { displayName, type OpenPkgExport, type OpenPkgSpec, unpacked } from './lookout/evidence';
-import type { Classifier } from './sonar';
+import type { Classifier, Question } from './sonar';
 import type { JudgedClaim } from './types';
 
 type Schema = {
@@ -17,6 +17,7 @@ type Schema = {
   required?: string[];
   anyOf?: Schema[];
   oneOf?: Schema[];
+  $ref?: string;
 };
 type SigParam = {
   name: string;
@@ -118,12 +119,35 @@ export function factsOf(spec: OpenPkgSpec): Index {
   return index;
 }
 
+/** Keys of an options object, including one named type such as `ServerConfig`. */
+function optionKeys(spec: OpenPkgSpec, schema: Schema | undefined, depth = 0): string[] {
+  if (!schema || depth > 3) return [];
+  if (schema.properties)
+    return Object.keys(schema.properties).filter((key) => !key.startsWith('_'));
+  const ref = schema.$ref?.split('/').pop();
+  if (!ref) return [];
+  const type =
+    spec.types?.find((item) => item.id === ref || item.name === ref) ??
+    spec.exports.find((item) => item.name === ref);
+  if (!type) return [];
+  const members = (type.members ?? [])
+    .map((member) => member.name)
+    .filter((name) => name && !name.startsWith('_'));
+  if (members.length) return members;
+  return optionKeys(spec, type.schema as Schema | undefined, depth + 1);
+}
+
 function factOf(spec: OpenPkgSpec, entry: OpenPkgExport): Fact {
   const sigs = (entry.signatures ?? []).map((sig) => unpacked(sig as Signature, spec) as Signature);
   const shaped = sigs.filter((sig) => sig.braces);
   const use = shaped.length ? shaped : sigs;
   const allowed = new Set<string>();
-  for (const sig of use) for (const param of sig.parameters ?? []) allowed.add(param.name);
+  for (const sig of use) {
+    for (const param of sig.parameters ?? []) {
+      allowed.add(param.name);
+      for (const key of optionKeys(spec, param.schema)) allowed.add(key);
+    }
+  }
   const withParams = use.filter((sig) => (sig.parameters ?? []).length > 0);
   const required = [...allowed].filter((name) =>
     withParams.every((sig) =>
@@ -156,129 +180,142 @@ function factOf(spec: OpenPkgSpec, entry: OpenPkgExport): Fact {
 
 type Hit = { line: number; exportName: string; issue: string; type: string; text: string };
 
+const SKIP = new Set([
+  'const',
+  'let',
+  'var',
+  'return',
+  'function',
+  'import',
+  'from',
+  'export',
+  'new',
+  'true',
+  'false',
+  'null',
+  'undefined',
+  'await',
+  'async',
+  'if',
+  'else',
+  'for',
+  'of',
+  'in',
+  'type',
+  'interface',
+  'class',
+  'this',
+  'string',
+  'number',
+  'boolean',
+]);
+
+/** Words in the section. Not a parse: anything that is not a letter breaks a word. */
+export function wordsOf(text: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const word of text.match(/[A-Za-z_$][\w$]*/g) ?? []) {
+    if (word.length < 2 || SKIP.has(word) || seen.has(word)) continue;
+    seen.add(word);
+    out.push(word);
+  }
+  return out;
+}
+
 export function checkSection(
   section: Section,
   index: Index,
-  importFrom: string[],
-): { hits: Hit[]; mentioned: Fact[] } {
-  if (section.older) return { hits: [], mentioned: [] };
+): { hits: Hit[]; mentioned: Fact[]; words: string[] } {
+  if (section.older) return { hits: [], mentioned: [], words: [] };
+  const words = wordsOf(section.text);
   const hits: Hit[] = [];
   const mentioned = new Set<Fact>();
-  const at = (line: number): number => section.start + line - 1;
-
-  for (const found of importsIn(section.text, importFrom)) {
-    const line = lineOf(section.text, found.at);
-    if (!index.has(found.name)) {
-      hits.push({
-        line: at(line),
-        exportName: found.name,
-        type: 'absent-name',
-        text: found.name,
-        issue: `Import '${found.name}' is not exported`,
-      });
-    }
-  }
-
   for (const [name, fact] of index) {
     if (!mentionedIn(section.text, name)) continue;
     mentioned.add(fact);
     if (fact.deprecated && !/deprecat/i.test(section.text)) {
-      const line = lineOf(
-        section.text,
-        section.text.search(new RegExp(`(?<![\\w$])${name}(?![\\w$])`)),
-      );
       hits.push({
-        line: at(line),
+        line: section.start + lineOf(section.text, section.text.search(boundary(name))) - 1,
         exportName: fact.name,
         type: 'deprecated-export',
         text: name,
         issue: `'${fact.name}' is deprecated${fact.replacement ? ` in favour of '${fact.replacement}'` : ''}, and this still teaches it as current`,
       });
     }
-    for (const call of callsOf(section.text, name)) {
-      const line = at(lineOf(section.text, call.at));
-      if (fact.braces && fact.allowed.length) {
-        for (const key of call.keys) {
-          if (!fact.allowed.includes(key) && !fact.members.includes(key)) {
-            hits.push({
-              line,
-              exportName: fact.name,
-              type: 'absent-name',
-              text: key,
-              issue: `'${key}' is not an option of '${fact.name}'`,
-            });
-          }
-        }
-      }
-      if (!call.elided && fact.braces) {
-        for (const req of fact.required) {
-          if (!call.keys.includes(req)) {
-            hits.push({
-              line,
-              exportName: fact.name,
-              type: 'missing-required',
-              text: name,
-              issue: `Call '${fact.name}' is missing required argument '${req}'`,
-            });
-          }
-        }
-        if (
-          fact.oneOf.length &&
-          !fact.oneOf.some((arm) => arm.every((key) => call.keys.includes(key)))
-        ) {
-          const arms = fact.oneOf.map((arm) => `'${arm.join(' + ')}'`).join(' or ');
-          hits.push({
-            line,
-            exportName: fact.name,
-            type: 'missing-required',
-            text: name,
-            issue: `Call '${fact.name}' needs one of ${arms}`,
-          });
-        }
-      }
-      if (!fact.braces) {
-        for (const arg of call.positional) {
-          if (!fact.allowed.includes(arg) && !index.has(arg)) {
-            hits.push({
-              line,
-              exportName: fact.name,
-              type: 'absent-name',
-              text: arg,
-              issue: `'${arg}' is not a parameter of '${fact.name}'`,
-            });
-          }
-        }
+  }
+  return { hits, mentioned: [...mentioned], words };
+}
+
+const ROLE_MIN = 0.85;
+const INTENT_MIN = 0.7;
+const PASSED_MAX = 0.25;
+const QUIET_INTENT = new Set(['data_example', 'mention', 'older_version', 'not_this']);
+
+/**
+ * A proof only when Jev is sure the word is an API claim and the record lacks it,
+ * or sure a real call skipped a required name. Example data and comments stay quiet.
+ */
+export function roleProofs(
+  fact: Fact,
+  section: Section,
+  intent: string,
+  intentConfidence: number,
+  roles: Record<string, number>,
+  passed: Record<string, number>,
+): Hit[] {
+  const hits: Hit[] = [];
+  const structural = intent === 'real_call' || intent === 'signature';
+  const sure = intentConfidence >= INTENT_MIN && structural && !QUIET_INTENT.has(intent);
+  if (sure) {
+    const known = new Set([
+      fact.name,
+      ...fact.allowed,
+      ...fact.members,
+      ...fact.required,
+      ...fact.oneOf.flat(),
+    ]);
+    for (const [word, score] of Object.entries(roles)) {
+      if (score < ROLE_MIN || known.has(word)) continue;
+      hits.push({
+        line: section.start + lineOf(section.text, section.text.search(boundary(word))) - 1,
+        exportName: fact.name,
+        type: 'absent-name',
+        text: word,
+        issue: `'${word}' is not part of '${fact.name}'`,
+      });
+    }
+    for (const req of fact.required) {
+      if (req === 'children') continue;
+      if ((passed[req] ?? 1) <= PASSED_MAX) {
+        hits.push({
+          line: section.start,
+          exportName: fact.name,
+          type: 'missing-required',
+          text: fact.name,
+          issue: `Call '${fact.name}' is missing required argument '${req}'`,
+        });
       }
     }
-    if (fact.members.length) {
-      for (const member of shapeMembers(section.text, name)) {
-        if (!fact.members.includes(member.name)) {
-          hits.push({
-            line: at(lineOf(section.text, member.at)),
-            exportName: fact.name,
-            type: 'absent-name',
-            text: member.name,
-            issue: `'${member.name}' is not a member of '${fact.name}'`,
-          });
-        }
-      }
+    if (fact.oneOf.length > 0 && (passed.one_of ?? 1) <= PASSED_MAX) {
+      const arms = fact.oneOf.map((arm) => `'${arm.join(' + ')}'`).join(' or ');
+      hits.push({
+        line: section.start,
+        exportName: fact.name,
+        type: 'missing-required',
+        text: fact.name,
+        issue: `Call '${fact.name}' needs one of ${arms}`,
+      });
     }
   }
-
-  const seen = new Set<string>();
-  return {
-    hits: hits.filter((hit) => {
-      const key = `${hit.line}|${hit.issue}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }),
-    mentioned: [...mentioned],
-  };
+  return hits;
 }
 
 function mentionedIn(text: string, name: string): boolean {
-  return new RegExp(`(?<![\\w$])${pattern(name)}(?![\\w$])`).test(text);
+  return boundary(name).test(text);
+}
+
+function boundary(name: string): RegExp {
+  return new RegExp(`(?<![\\w$])${pattern(name)}(?![\\w$])`);
 }
 
 function lineOf(text: string, index: number): number {
@@ -288,150 +325,6 @@ function lineOf(text: string, index: number): number {
 
 function pattern(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function importsIn(text: string, from: string[]): { name: string; at: number }[] {
-  if (!from.length) return [];
-  const out: { name: string; at: number }[] = [];
-  const re = /import\s+(?:type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"]/g;
-  for (const match of text.matchAll(re)) {
-    const specifier = match[2];
-    if (
-      specifier.startsWith('.') ||
-      !from.some((item) => specifier === item || specifier.startsWith(`${item}/`))
-    )
-      continue;
-    const at = match.index ?? 0;
-    const clause = match[1] ?? '';
-    const head = clause.trim();
-    if (/^[\w$]+/.test(head)) out.push({ name: /^[\w$]+/.exec(head)?.[0] ?? '', at });
-    const brace = /\{([^}]+)\}/.exec(clause);
-    for (const part of (brace?.[1] ?? '').split(',')) {
-      const raw = part.trim();
-      if (!raw) continue;
-      const renamed = /([\w$]+)\s+as\s+[\w$]+/.exec(raw);
-      if (renamed) {
-        out.push({ name: renamed[1], at });
-        continue;
-      }
-      for (const name of raw.split(':')) {
-        const side = name.trim();
-        if (/^[\w$]+$/.test(side)) out.push({ name: side, at });
-      }
-    }
-  }
-  return out.filter((item) => item.name && item.name !== 'type');
-}
-
-type Call = { at: number; keys: string[]; positional: string[]; elided: boolean };
-
-function callsOf(text: string, name: string): Call[] {
-  const out: Call[] = [];
-  const re = new RegExp(`(?<![\\w$.])${pattern(name)}\\s*(?:<[^\\n>]{0,160}>)?\\s*\\(`, 'g');
-  for (const match of text.matchAll(re)) {
-    const paren = (match.index ?? 0) + match[0].lastIndexOf('(');
-    const parsed = parseCall(text, paren);
-    if (parsed) out.push({ at: match.index ?? 0, ...parsed });
-  }
-  const jsx = new RegExp(`<${pattern(name)}\\b([^>]*)>`, 'g');
-  for (const match of text.matchAll(jsx)) {
-    const keys = [...(match[1] ?? '').matchAll(/([\w$]+)\s*=/g)].map((item) => item[1]);
-    out.push({
-      at: match.index ?? 0,
-      keys,
-      positional: [],
-      elided: /\{\s*\.\.\./.test(match[1] ?? ''),
-    });
-  }
-  return out;
-}
-
-function parseCall(
-  text: string,
-  paren: number,
-): { keys: string[]; positional: string[]; elided: boolean } | null {
-  let look = paren + 1;
-  while (look < text.length && /\s/.test(text[look])) look++;
-  const braces = text[look] === '{';
-  const keys: string[] = [];
-  const positional: string[] = [];
-  let elided = false;
-  let parenDepth = 0;
-  let braceDepth = 0;
-  let token = '';
-  const take = (next: string): void => {
-    if (!token) return;
-    const word = token;
-    token = '';
-    if (braces && braceDepth === 1 && parenDepth === 1 && /^\s*:/.test(next)) keys.push(word);
-    else if (!braces && parenDepth === 1 && braceDepth === 0) positional.push(word);
-  };
-  for (let at = paren; at < text.length; at++) {
-    const ch = text[at];
-    if (ch === '(') {
-      take(text.slice(at));
-      parenDepth++;
-      continue;
-    }
-    if (ch === ')') {
-      take(text.slice(at));
-      parenDepth--;
-      if (parenDepth === 0) break;
-      continue;
-    }
-    if (ch === '{') {
-      take(text.slice(at));
-      braceDepth++;
-      continue;
-    }
-    if (ch === '}') {
-      take(text.slice(at));
-      braceDepth--;
-      continue;
-    }
-    if (ch === '/' && text[at + 1] === '/') {
-      if (braces && braceDepth === 1 && parenDepth === 1) elided = true;
-      while (at < text.length && text[at] !== '\n') at++;
-      continue;
-    }
-    if (ch === '/' && text[at + 1] === '*') {
-      if (braces && braceDepth === 1 && parenDepth === 1) elided = true;
-      at += 2;
-      while (at < text.length && !(text[at] === '*' && text[at + 1] === '/')) at++;
-      continue;
-    }
-    if (ch === '.' && text[at + 1] === '.' && text[at + 2] === '.') {
-      if ((braces && braceDepth === 1) || (!braces && parenDepth === 1 && braceDepth === 0))
-        elided = true;
-      token = '';
-      at += 2;
-      continue;
-    }
-    if (/[\w$]/.test(ch)) {
-      token += ch;
-      if (!/[\w$]/.test(text[at + 1] ?? '')) take(text.slice(at + 1));
-      continue;
-    }
-    token = '';
-  }
-  return { keys, positional, elided };
-}
-
-function shapeMembers(text: string, name: string): { name: string; at: number }[] {
-  const out: { name: string; at: number }[] = [];
-  const re = new RegExp(
-    `(?<![\\w$])${pattern(name)}(?![\\w$])[^\\n{}]{0,40}\\{([^{}\\n]+)\\}`,
-    'g',
-  );
-  for (const match of text.matchAll(re)) {
-    const body = match[1] ?? '';
-    const at = match.index ?? 0;
-    for (const ident of body.matchAll(/[\w$]+/g)) {
-      if (/^(key|type|string|number|boolean)$/.test(ident[0])) continue;
-      out.push({ name: ident[0].replace(/\?$/, ''), at: at + (ident.index ?? 0) });
-    }
-  }
-  return out;
 }
 
 function claimFor(file: string, section: Section, hit: Hit): JudgedClaim {
@@ -452,14 +345,29 @@ function claimFor(file: string, section: Section, hit: Hit): JudgedClaim {
   };
 }
 
-export type ReadCache = Record<string, { choice: string; confidence: number }>;
+type Answer = {
+  type?: string;
+  probability?: number;
+  choice?: string;
+  probabilities?: Record<string, number>;
+};
+
+export type ReadCache = Record<
+  string,
+  {
+    intent: string;
+    intentConfidence: number;
+    relation: string;
+    relationConfidence: number;
+    roles: Record<string, number>;
+    passed: Record<string, number>;
+  }
+>;
 
 export type ReadStats = { requests: number; cached: number; inputTokens: number; model?: string };
 
-/**
- * Behaviour only. One Choice per mentioned export: the sentence against the
- * description. Code proofs are already on the claims.
- */
+const WORD_CAP = 24;
+
 export async function readPage(
   file: string,
   content: string,
@@ -470,19 +378,24 @@ export async function readPage(
 ): Promise<{ claims: JudgedClaim[]; stats: ReadStats }> {
   const index = factsOf(merge(specs));
   const claims: JudgedClaim[] = [];
-  const jobs: { section: Section; fact: Fact }[] = [];
-  for (const section of splitSections(content)) {
-    const found = checkSection(section, index, importFrom);
-    for (const hit of found.hits) claims.push(claimFor(file, section, hit));
-    if (!section.prose || section.older) continue;
-    for (const fact of found.mentioned) {
-      if (fact.description) jobs.push({ section, fact });
-    }
-  }
   const stats: ReadStats = { requests: 0, cached: 0, inputTokens: 0 };
-  for (const job of jobs) {
-    const behaviour = await ask(file, job.section, job.fact, classifier, cache, stats);
-    if (behaviour) claims.push(behaviour);
+  for (const section of splitSections(content)) {
+    const found = checkSection(section, index);
+    for (const hit of found.hits) claims.push(claimFor(file, section, hit));
+    if (section.older || !classifier) continue;
+    for (const fact of found.mentioned) {
+      const judged = await judge(
+        file,
+        section,
+        fact,
+        found.words,
+        importFrom,
+        classifier,
+        cache,
+        stats,
+      );
+      claims.push(...judged);
+    }
   }
   return { claims, stats };
 }
@@ -494,65 +407,168 @@ function merge(specs: OpenPkgSpec[]): OpenPkgSpec {
   };
 }
 
-async function ask(
+function unknownWords(fact: Fact, words: string[]): string[] {
+  const known = new Set([
+    fact.name,
+    ...fact.allowed,
+    ...fact.members,
+    ...fact.required,
+    ...fact.oneOf.flat(),
+  ]);
+  return words.filter((word) => !known.has(word)).slice(0, WORD_CAP);
+}
+
+async function judge(
   file: string,
   section: Section,
   fact: Fact,
-  classifier: Classifier | null,
+  words: string[],
+  importFrom: string[],
+  classifier: Classifier,
   cache: ReadCache,
   stats: ReadStats,
-): Promise<JudgedClaim | null> {
-  if (!classifier || !fact.description) return null;
+): Promise<JudgedClaim[]> {
+  const unknown = unknownWords(fact, words);
   const state = {
-    export: { name: fact.name, description: fact.description, deprecated: fact.deprecated },
+    export: {
+      name: fact.name,
+      description: fact.description ?? '',
+      deprecated: fact.deprecated,
+      parameters: fact.allowed,
+      required: fact.required,
+      oneOf: fact.oneOf,
+      members: fact.members,
+    },
+    importedFrom: importFrom,
     section: section.text.slice(0, 4000),
+    words: unknown,
   };
   const key = createHash('sha256')
-    .update(`b1\0${JSON.stringify(state)}`)
+    .update(`b3\0${JSON.stringify(state)}`)
     .digest('hex');
   const cached = cache[key];
-  let answer = cached && typeof cached.choice === 'string' ? cached : undefined;
+  let answer = cached?.intent ? cached : undefined;
   if (answer) stats.cached++;
   else {
-    const result = await classifier.evaluate({
-      state,
-      questions: {
-        relation: {
-          type: 'choice',
-          instructions:
-            'How does `section` relate to `export.description`? A sample labeled as an older version is showing the past, which is `says_nothing`.',
-          criteria: {
-            matches: 'The section states what the description states.',
-            contradicts: 'The section states a behaviour the description denies.',
-            says_nothing: 'The section does not address the description.',
-          },
+    const questions: Record<string, Question> = {
+      intent: {
+        type: 'choice',
+        instructions: 'What is this section doing with `export.name`?',
+        criteria: {
+          real_call: 'A sample shows a working call of this export and the options it passes.',
+          signature: 'The section is teaching the parameter names of this export.',
+          data_example:
+            'A value is being stored or constructed. Keys are example data, not the API of this export.',
+          mention: 'The export is named, not called, and no option or member is being claimed.',
+          older_version: 'The sample is explicitly an older version.',
+          not_this: 'The section is not about this export.',
         },
       },
-    });
+      relation: {
+        type: 'choice',
+        instructions: 'How does the prose in `section` relate to `export.description`?',
+        criteria: {
+          matches: 'The prose states what the description states.',
+          contradicts: 'The prose states a behaviour the description denies.',
+          says_nothing: 'The prose does not address the description.',
+        },
+      },
+    };
+    for (const word of unknown) {
+      questions[`role_${word}`] = {
+        type: 'noul',
+        instructions: `Does the section claim that \`${word}\` is an option, a parameter, or a member of \`${fact.name}\` itself? A value in an example, a word in a comment, a field of data stored in an example, and a method on a value the call returns are not that.`,
+        criteria: {
+          true: `\`${word}\` is claimed as part of the API of \`${fact.name}\`.`,
+          false: `\`${word}\` is prose, a comment, a value, or example data.`,
+        },
+      };
+    }
+    for (const req of fact.required) {
+      if (req === 'children') continue;
+      questions[`passed_${req}`] = {
+        type: 'noul',
+        instructions: `Does a real call of \`${fact.name}\` in the section pass \`${req}\`?`,
+        criteria: {
+          true: `The call passes \`${req}\`.`,
+          false: `A real call is shown and \`${req}\` is absent.`,
+        },
+      };
+    }
+    if (fact.oneOf.length) {
+      const arms = fact.oneOf.map((arm) => arm.join(' or ')).join(', or ');
+      questions.passed_one_of = {
+        type: 'noul',
+        instructions: `Does a real call of \`${fact.name}\` pass at least one of ${arms}?`,
+        criteria: {
+          true: 'One of those is passed.',
+          false: 'A real call is shown and none of them is passed.',
+        },
+      };
+    }
+    const result = await classifier.evaluate({ state, questions });
     stats.requests++;
     stats.inputTokens += result.usage.inputTokens;
     stats.model = result.model;
-    const choice = result.answers.relation;
-    const probs = 'probabilities' in choice ? choice.probabilities : {};
-    const values = Object.values(probs);
-    const peak = values.length ? Math.max(...values) : 0;
-    const confidence = values.length > 1 ? (values.length * peak - 1) / (values.length - 1) : peak;
-    answer = { choice: 'choice' in choice ? choice.choice : 'says_nothing', confidence };
+    const answers = result.answers as Record<string, Answer>;
+    const intent = choiceOf(answers.intent);
+    const relation = choiceOf(answers.relation);
+    const roles: Record<string, number> = {};
+    const passed: Record<string, number> = {};
+    for (const word of unknown) roles[word] = yes(answers[`role_${word}`]);
+    for (const req of fact.required) passed[req] = yes(answers[`passed_${req}`]);
+    if (fact.oneOf.length) passed.one_of = yes(answers.passed_one_of);
+    answer = {
+      intent: intent.choice,
+      intentConfidence: intent.confidence,
+      relation: relation.choice,
+      relationConfidence: relation.confidence,
+      roles,
+      passed,
+    };
     cache[key] = answer;
   }
-  if (answer.choice !== 'contradicts' || answer.confidence < 0.8) return null;
-  const line = section.start;
-  return {
-    id: `${file}:${line}:behaviour:${fact.name}`,
-    kind: 'prose',
-    text: proseOf(section.text).split('\n')[0] ?? fact.name,
-    locator: {
-      path: file,
-      start: { line, col: 1 },
-      end: { line, col: 1 },
-      ...(section.heading ? { headingText: section.heading.replace(/`/g, '') } : {}),
-    },
-    specRef: { export: fact.name },
-    jev: { stale: 0, incomplete: 0, inaccurate: answer.confidence, reason: 'prose' },
-  };
+  const claims: JudgedClaim[] = [];
+  for (const hit of roleProofs(
+    fact,
+    section,
+    answer.intent,
+    answer.intentConfidence,
+    answer.roles,
+    answer.passed,
+  )) {
+    claims.push(claimFor(file, section, hit));
+  }
+  if (
+    section.prose &&
+    fact.description &&
+    answer.relation === 'contradicts' &&
+    answer.relationConfidence >= 0.8
+  ) {
+    claims.push({
+      id: `${file}:${section.start}:behaviour:${fact.name}`,
+      kind: 'prose',
+      text: proseOf(section.text).split('\n')[0] ?? fact.name,
+      locator: {
+        path: file,
+        start: { line: section.start, col: 1 },
+        end: { line: section.start, col: 1 },
+        ...(section.heading ? { headingText: section.heading.replace(/`/g, '') } : {}),
+      },
+      specRef: { export: fact.name },
+      jev: { stale: 0, incomplete: 0, inaccurate: answer.relationConfidence, reason: 'prose' },
+    });
+  }
+  return claims;
+}
+
+function yes(answer: Answer | undefined): number {
+  return answer?.probability ?? 0;
+}
+
+function choiceOf(answer: Answer | undefined): { choice: string; confidence: number } {
+  const probs = Object.values(answer?.probabilities ?? {});
+  const peak = probs.length ? Math.max(...probs) : 0;
+  const confidence = probs.length > 1 ? (probs.length * peak - 1) / (probs.length - 1) : peak;
+  return { choice: answer?.choice ?? 'not_this', confidence };
 }
